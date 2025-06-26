@@ -1,5 +1,18 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { 
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  sendPasswordResetEmail,
+  onAuthStateChanged,
+  User as FirebaseUser,
+  updateProfile as updateFirebaseProfile,
+  PhoneAuthProvider,
+  signInWithCredential,
+} from 'firebase/auth';
+import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
+import { auth, db } from '../config/firebase';
 
 interface User {
   id: string;
@@ -8,6 +21,9 @@ interface User {
   fullName: string;
   isVerified: boolean;
   createdAt: string;
+  photoURL?: string;
+  kycStatus?: 'pending' | 'verified' | 'rejected';
+  walletId?: string;
 }
 
 interface AuthContextType {
@@ -45,102 +61,146 @@ export function AuthProvider({ children }: AuthProviderProps) {
     phoneNumber: string;
     fullName?: string;
     isSignUp: boolean;
+    verificationId?: string;
   } | null>(null);
 
   useEffect(() => {
-    loadStoredAuth();
-  }, []);
-
-  const loadStoredAuth = async () => {
-    try {
-      const storedUser = await AsyncStorage.getItem('user');
-      const storedToken = await AsyncStorage.getItem('authToken');
-      
-      if (storedUser && storedToken) {
-        setUser(JSON.parse(storedUser));
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          // Get additional user data from Firestore
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+          
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            const user: User = {
+              id: firebaseUser.uid,
+              email: firebaseUser.email || undefined,
+              phoneNumber: firebaseUser.phoneNumber || undefined,
+              fullName: userData.fullName || firebaseUser.displayName || 'User',
+              isVerified: firebaseUser.emailVerified,
+              createdAt: userData.createdAt || new Date().toISOString(),
+              photoURL: firebaseUser.photoURL || undefined,
+              kycStatus: userData.kycStatus || 'pending',
+              walletId: userData.walletId,
+            };
+            setUser(user);
+          } else {
+            // Create user document in Firestore if it doesn't exist
+            const newUser: User = {
+              id: firebaseUser.uid,
+              email: firebaseUser.email || undefined,
+              phoneNumber: firebaseUser.phoneNumber || undefined,
+              fullName: firebaseUser.displayName || 'User',
+              isVerified: firebaseUser.emailVerified,
+              createdAt: new Date().toISOString(),
+              photoURL: firebaseUser.photoURL || undefined,
+              kycStatus: 'pending',
+            };
+            
+            await setDoc(doc(db, 'users', firebaseUser.uid), {
+              fullName: newUser.fullName,
+              email: newUser.email,
+              phoneNumber: newUser.phoneNumber,
+              isVerified: newUser.isVerified,
+              createdAt: newUser.createdAt,
+              kycStatus: newUser.kycStatus,
+            });
+            
+            setUser(newUser);
+          }
+        } catch (error) {
+          console.error('Error fetching user data:', error);
+          setUser(null);
+        }
+      } else {
+        setUser(null);
       }
-    } catch (error) {
-      console.error('Error loading stored auth:', error);
-    } finally {
       setLoading(false);
-    }
-  };
+    });
 
-  const storeAuth = async (userData: User, token: string) => {
-    try {
-      await AsyncStorage.setItem('user', JSON.stringify(userData));
-      await AsyncStorage.setItem('authToken', token);
-    } catch (error) {
-      console.error('Error storing auth:', error);
-    }
-  };
-
-  const clearAuth = async () => {
-    try {
-      await AsyncStorage.multiRemove(['user', 'authToken']);
-    } catch (error) {
-      console.error('Error clearing auth:', error);
-    }
-  };
+    return unsubscribe;
+  }, []);
 
   const signIn = async (email: string, password: string) => {
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      // User state will be updated through onAuthStateChanged
+    } catch (error: any) {
+      let errorMessage = 'Sign in failed';
       
-      // Mock successful login
-      const userData: User = {
-        id: 'user_' + Date.now(),
-        email,
-        fullName: 'John Doe', // In real app, this would come from API
-        isVerified: true,
-        createdAt: new Date().toISOString(),
-      };
+      switch (error.code) {
+        case 'auth/user-not-found':
+          errorMessage = 'No account found with this email';
+          break;
+        case 'auth/wrong-password':
+          errorMessage = 'Incorrect password';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'Invalid email address';
+          break;
+        case 'auth/user-disabled':
+          errorMessage = 'This account has been disabled';
+          break;
+        default:
+          errorMessage = error.message || 'Sign in failed';
+      }
       
-      const token = 'mock_token_' + Date.now();
-      
-      await storeAuth(userData, token);
-      setUser(userData);
-    } catch (error) {
-      throw new Error('Invalid email or password');
+      throw new Error(errorMessage);
     }
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       
-      // Mock successful registration
-      const userData: User = {
-        id: 'user_' + Date.now(),
-        email,
+      // Update Firebase Auth profile
+      await updateFirebaseProfile(userCredential.user, {
+        displayName: fullName
+      });
+      
+      // Create user document in Firestore
+      await setDoc(doc(db, 'users', userCredential.user.uid), {
         fullName,
-        isVerified: true,
+        email,
+        isVerified: userCredential.user.emailVerified,
         createdAt: new Date().toISOString(),
-      };
+        kycStatus: 'pending',
+      });
       
-      const token = 'mock_token_' + Date.now();
+      // User state will be updated through onAuthStateChanged
+    } catch (error: any) {
+      let errorMessage = 'Registration failed';
       
-      await storeAuth(userData, token);
-      setUser(userData);
-    } catch (error) {
-      throw new Error('Registration failed. Please try again.');
+      switch (error.code) {
+        case 'auth/email-already-in-use':
+          errorMessage = 'An account with this email already exists';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'Invalid email address';
+          break;
+        case 'auth/weak-password':
+          errorMessage = 'Password is too weak';
+          break;
+        default:
+          errorMessage = error.message || 'Registration failed';
+      }
+      
+      throw new Error(errorMessage);
     }
   };
 
   const signInWithPhone = async (phoneNumber: string) => {
     try {
-      // Simulate sending OTP
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
+      // Note: Phone auth requires additional setup with Firebase
+      // For demo purposes, we'll simulate the process
       setPendingPhoneAuth({
         phoneNumber,
         isSignUp: false,
+        verificationId: 'mock_verification_id',
       });
       
-      // In real app, OTP would be sent via SMS
-      console.log('OTP sent to:', phoneNumber);
+      console.log('SMS verification code sent to:', phoneNumber);
     } catch (error) {
       throw new Error('Failed to send verification code');
     }
@@ -148,17 +208,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const signUpWithPhone = async (phoneNumber: string, fullName: string) => {
     try {
-      // Simulate sending OTP
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
+      // Note: Phone auth requires additional setup with Firebase
+      // For demo purposes, we'll simulate the process
       setPendingPhoneAuth({
         phoneNumber,
         fullName,
         isSignUp: true,
+        verificationId: 'mock_verification_id',
       });
       
-      // In real app, OTP would be sent via SMS
-      console.log('OTP sent to:', phoneNumber);
+      console.log('SMS verification code sent to:', phoneNumber);
     } catch (error) {
       throw new Error('Failed to send verification code');
     }
@@ -170,27 +229,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     try {
-      // Simulate OTP verification
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // In a real implementation, you would use:
+      // const credential = PhoneAuthProvider.credential(pendingPhoneAuth.verificationId, otp);
+      // const userCredential = await signInWithCredential(auth, credential);
       
-      // Mock OTP verification (accept any 6-digit code)
-      if (otp.length !== 6) {
+      // For demo purposes, we'll simulate successful verification
+      if (otp.length === 6) {
+        console.log('Phone number verified successfully');
+        setPendingPhoneAuth(null);
+      } else {
         throw new Error('Invalid verification code');
       }
-      
-      const userData: User = {
-        id: 'user_' + Date.now(),
-        phoneNumber: pendingPhoneAuth.phoneNumber,
-        fullName: pendingPhoneAuth.fullName || 'Phone User',
-        isVerified: true,
-        createdAt: new Date().toISOString(),
-      };
-      
-      const token = 'mock_token_' + Date.now();
-      
-      await storeAuth(userData, token);
-      setUser(userData);
-      setPendingPhoneAuth(null);
     } catch (error) {
       throw new Error('Invalid verification code');
     }
@@ -203,8 +252,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     try {
       // Simulate resending OTP
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      console.log('OTP resent to:', pendingPhoneAuth.phoneNumber);
+      console.log('Verification code resent to:', pendingPhoneAuth.phoneNumber);
     } catch (error) {
       throw new Error('Failed to resend verification code');
     }
@@ -212,31 +260,45 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const resetPassword = async (email: string) => {
     try {
-      // Simulate sending reset email
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      console.log('Password reset email sent to:', email);
-    } catch (error) {
-      throw new Error('Failed to send reset email');
+      await sendPasswordResetEmail(auth, email);
+    } catch (error: any) {
+      let errorMessage = 'Failed to send reset email';
+      
+      switch (error.code) {
+        case 'auth/user-not-found':
+          errorMessage = 'No account found with this email';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'Invalid email address';
+          break;
+        default:
+          errorMessage = error.message || 'Failed to send reset email';
+      }
+      
+      throw new Error(errorMessage);
     }
   };
 
   const signOut = async () => {
     try {
-      await clearAuth();
+      await firebaseSignOut(auth);
       setUser(null);
       setPendingPhoneAuth(null);
     } catch (error) {
       console.error('Error signing out:', error);
+      throw new Error('Failed to sign out');
     }
   };
 
   const updateProfile = async (updates: Partial<User>) => {
-    if (!user) return;
+    if (!user) throw new Error('No user signed in');
 
     try {
-      const updatedUser = { ...user, ...updates };
-      await storeAuth(updatedUser, 'current_token'); // In real app, get current token
-      setUser(updatedUser);
+      // Update Firestore document
+      await updateDoc(doc(db, 'users', user.id), updates);
+      
+      // Update local user state
+      setUser(prev => prev ? { ...prev, ...updates } : null);
     } catch (error) {
       throw new Error('Failed to update profile');
     }
