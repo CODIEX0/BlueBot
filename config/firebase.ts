@@ -7,13 +7,13 @@ import { Platform } from 'react-native';
 
 // Your Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyExample_API_Key_Replace_With_Real",
-  authDomain: "bluebot-finance-assistant.firebaseapp.com",
-  projectId: "bluebot-finance-assistant",
-  storageBucket: "bluebot-finance-assistant.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef123456",
-  measurementId: "G-ABCDEF123"
+  apiKey: "AIzaSyClM3chI-4ChbBkroKEyq_o8Qjnaiha6MQ",
+  authDomain: "bluebot-83d8f.firebaseapp.com",
+  projectId: "bluebot-83d8f",
+  storageBucket: "bluebot-83d8f.firebasestorage.app",
+  messagingSenderId: "961722394282",
+  appId: "1:961722394282:web:04b266d096941df03d52d3",
+  measurementId: "G-XGKB40J5T5"
 };
 
 // Initialize Firebase

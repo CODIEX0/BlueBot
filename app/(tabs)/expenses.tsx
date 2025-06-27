@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
+const { useState, useCallback, useEffect, useRef, useContext, createContext } = React;
 import {
   View,
   Text,
@@ -8,20 +9,26 @@ import {
   SafeAreaView,
   Dimensions,
   Modal,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import {
-  PieChart,
-  Camera,
-  Plus,
-  Filter,
-  TrendingUp,
-  TrendingDown,
-  Calendar,
-  Receipt,
-} from 'lucide-react-native';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import ReceiptScanner from '../../components/ReceiptScanner';
+import { useMobileDatabase } from '../../contexts/MobileDatabaseContext';
 
 const { width } = Dimensions.get('window');
+
+// Icon wrapper component to handle type issues
+const IconComponent = ({ name, size, color }: { name: string; size: number; color: string }) => {
+  const IconLib = Ionicons as any;
+  return <IconLib name={name} size={size} color={color} />;
+};
+
+// LinearGradient wrapper component to handle type issues
+const GradientComponent = ({ colors, style, children }: { colors: string[]; style?: any; children: React.ReactNode }) => {
+  const GradientLib = LinearGradient as any;
+  return <GradientLib colors={colors} style={style}>{children}</GradientLib>;
+};
 
 interface Expense {
   id: string;
@@ -37,14 +44,16 @@ interface Category {
   amount: number;
   budget?: number;
   color: string;
-  icon: React.ReactNode;
+  icon: string;
 }
 
 export default function Expenses() {
+  const { expenses, getExpensesByDateRange } = useMobileDatabase();
   const [selectedPeriod, setSelectedPeriod] = useState('This Month');
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [totalSpent, setTotalSpent] = useState(4567.30);
   const [monthlyBudget, setMonthlyBudget] = useState(6000);
+  const [userExpenses, setUserExpenses] = useState<any[]>([]);
 
   const categories: Category[] = [
     {
@@ -52,42 +61,42 @@ export default function Expenses() {
       amount: 1834.50,
       budget: 2000,
       color: '#10B981',
-      icon: <Receipt size={20} color="#10B981" />,
+      icon: 'basket-outline',
     },
     {
       name: 'Transport',
       amount: 892.30,
       budget: 1200,
       color: '#0EA5E9',
-      icon: <Receipt size={20} color="#0EA5E9" />,
+      icon: 'car-outline',
     },
     {
       name: 'Entertainment',
       amount: 654.20,
       budget: 800,
       color: '#8B5CF6',
-      icon: <Receipt size={20} color="#8B5CF6" />,
+      icon: 'musical-notes-outline',
     },
     {
       name: 'Utilities',
       amount: 543.10,
       budget: 700,
       color: '#F59E0B',
-      icon: <Receipt size={20} color="#F59E0B" />,
+      icon: 'flash-outline',
     },
     {
       name: 'Healthcare',
       amount: 432.80,
       budget: 500,
       color: '#EF4444',
-      icon: <Receipt size={20} color="#EF4444" />,
+      icon: 'medical-outline',
     },
     {
       name: 'Other',
       amount: 210.40,
       budget: 300,
       color: '#64748B',
-      icon: <Receipt size={20} color="#64748B" />,
+      icon: 'ellipsis-horizontal-outline',
     },
   ];
 
@@ -175,13 +184,13 @@ export default function Expenses() {
           <Text style={styles.headerTitle}>Expense Tracking</Text>
           <View style={styles.headerActions}>
             <TouchableOpacity style={styles.headerButton}>
-              <Filter size={20} color="#1E3A8A" />
+              <IconComponent name="funnel-outline" size={20} color="#1E3A8A" />
             </TouchableOpacity>
             <TouchableOpacity 
               style={styles.headerButton}
               onPress={() => setShowReceiptModal(true)}
             >
-              <Camera size={20} color="#1E3A8A" />
+              <IconComponent name="camera-outline" size={20} color="#1E3A8A" />
             </TouchableOpacity>
           </View>
         </View>
@@ -213,10 +222,8 @@ export default function Expenses() {
 
         {/* Budget Overview */}
         <View style={styles.section}>
-          <LinearGradient
+          <GradientComponent
             colors={budgetProgress > 90 ? ['#EF4444', '#DC2626'] : ['#1E3A8A', '#0EA5E9']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
             style={styles.budgetCard}
           >
             <View style={styles.budgetHeader}>
@@ -235,7 +242,7 @@ export default function Expenses() {
                 ]}
               />
             </View>
-          </LinearGradient>
+          </GradientComponent>
         </View>
 
         {/* Category Breakdown */}
@@ -250,7 +257,7 @@ export default function Expenses() {
                 <View style={styles.categoryHeader}>
                   <View style={styles.categoryInfo}>
                     <View style={[styles.categoryIcon, { backgroundColor: `${category.color}20` }]}>
-                      {category.icon}
+                      <IconComponent name={category.icon} size={20} color={category.color} />
                     </View>
                     <Text style={styles.categoryName}>{category.name}</Text>
                   </View>
@@ -314,7 +321,7 @@ export default function Expenses() {
                 <View style={styles.expenseDetails}>
                   <Text style={styles.expenseDate}>{expense.date}</Text>
                   {expense.receipt && (
-                    <Receipt size={12} color="#10B981" style={styles.receiptIcon} />
+                    <IconComponent name="receipt-outline" size={12} color="#10B981" />
                   )}
                 </View>
               </View>
@@ -324,7 +331,7 @@ export default function Expenses() {
 
         {/* Add Expense Button */}
         <TouchableOpacity style={styles.addButton}>
-          <Plus size={24} color="#FFFFFF" />
+          <IconComponent name="add" size={24} color="#FFFFFF" />
           <Text style={styles.addButtonText}>Add Expense</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -346,7 +353,7 @@ export default function Expenses() {
             </TouchableOpacity>
           </View>
           <View style={styles.cameraPlaceholder}>
-            <Camera size={64} color="#64748B" />
+            <IconComponent name="camera-outline" size={64} color="#64748B" />
             <Text style={styles.cameraText}>Camera view would appear here</Text>
             <Text style={styles.cameraSubtext}>
               Point your camera at a receipt to automatically extract expense details
@@ -666,3 +673,4 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
+

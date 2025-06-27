@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React from 'react';
+const { useState, useCallback, useEffect, useRef, useContext, createContext } = React;
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ethers } from 'ethers';
 import { useAuth } from './AuthContext';
@@ -69,7 +70,7 @@ export function useCrypto() {
 }
 
 interface CryptoProviderProps {
-  children: ReactNode;
+  children: React.ReactNode;
 }
 
 export function CryptoProvider({ children }: CryptoProviderProps) {
@@ -79,7 +80,7 @@ export function CryptoProvider({ children }: CryptoProviderProps) {
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (user) {
       loadWallet();
     }
@@ -405,7 +406,7 @@ export function CryptoProvider({ children }: CryptoProviderProps) {
 
   const validateAddress = (address: string): boolean => {
     try {
-      return ethers.isAddress(address);
+      return ethers.utils.isAddress(address);
     } catch {
       return false;
     }
@@ -458,3 +459,5 @@ export function CryptoProvider({ children }: CryptoProviderProps) {
     </CryptoContext.Provider>
   );
 }
+
+

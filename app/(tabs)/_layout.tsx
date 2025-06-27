@@ -1,5 +1,11 @@
 import { Tabs } from 'expo-router';
-import { Home, MessageCircle, PieChart, Wallet, User, Bot } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
+
+// Temporary icon wrapper to handle type issues
+const TabIcon = ({ name, size, color }: { name: string; size: number; color: string }) => {
+  const Icon = Ionicons as any;
+  return <Icon name={name} size={size} color={color} />;
+};
 
 export default function TabLayout() {
   return (
@@ -26,7 +32,7 @@ export default function TabLayout() {
         options={{
           title: 'Dashboard',
           tabBarIcon: ({ size, color }) => (
-            <Home size={size} color={color} />
+            <TabIcon name="home-outline" size={size} color={color} />
           ),
         }}
       />
@@ -35,7 +41,16 @@ export default function TabLayout() {
         options={{
           title: 'BlueBot',
           tabBarIcon: ({ size, color }) => (
-            <Bot size={size} color={color} />
+            <TabIcon name="chatbubble-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="learn"
+        options={{
+          title: 'Learn',
+          tabBarIcon: ({ size, color }) => (
+            <TabIcon name="library-outline" size={size} color={color} />
           ),
         }}
       />
@@ -44,7 +59,7 @@ export default function TabLayout() {
         options={{
           title: 'Expenses',
           tabBarIcon: ({ size, color }) => (
-            <PieChart size={size} color={color} />
+            <TabIcon name="pie-chart-outline" size={size} color={color} />
           ),
         }}
       />
@@ -53,7 +68,7 @@ export default function TabLayout() {
         options={{
           title: 'Wallet',
           tabBarIcon: ({ size, color }) => (
-            <Wallet size={size} color={color} />
+            <TabIcon name="wallet-outline" size={size} color={color} />
           ),
         }}
       />
@@ -62,7 +77,7 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ size, color }) => (
-            <User size={size} color={color} />
+            <TabIcon name="person-outline" size={size} color={color} />
           ),
         }}
       />

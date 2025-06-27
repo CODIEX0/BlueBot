@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React from 'react';
+const { useState, useCallback, useEffect, useRef, useContext, createContext } = React;
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface Achievement {
@@ -83,7 +84,7 @@ export function useGamification() {
 }
 
 interface GamificationProviderProps {
-  children: ReactNode;
+  children: React.ReactNode;
 }
 
 export function GamificationProvider({ children }: GamificationProviderProps) {
@@ -484,3 +485,4 @@ export function GamificationProvider({ children }: GamificationProviderProps) {
     </GamificationContext.Provider>
   );
 }
+

@@ -1,18 +1,29 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React from 'react';
+const { useState, useCallback, useEffect, useRef, useContext, createContext } = React;
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { 
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
   sendPasswordResetEmail,
+  sendSignInLinkToEmail,
+  isSignInWithEmailLink,
+  signInWithEmailLink,
   onAuthStateChanged,
   User as FirebaseUser,
   updateProfile as updateFirebaseProfile,
   PhoneAuthProvider,
   signInWithCredential,
+  GoogleAuthProvider,
+  signInWithPopup,
+  RecaptchaVerifier,
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
+import * as LocalAuthentication from 'expo-local-authentication';
+import * as AuthSession from 'expo-auth-session';
+import * as Crypto from 'expo-crypto';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
 interface User {
   id: string;
@@ -24,11 +35,15 @@ interface User {
   photoURL?: string;
   kycStatus?: 'pending' | 'verified' | 'rejected';
   walletId?: string;
+  biometricEnabled?: boolean;
+  lastLoginMethod?: 'email' | 'phone' | 'google' | 'passwordless' | 'biometric';
 }
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  biometricAvailable: boolean;
+  // Traditional auth methods
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, fullName: string) => Promise<void>;
   signInWithPhone: (phoneNumber: string) => Promise<void>;
@@ -36,8 +51,17 @@ interface AuthContextType {
   verifyOTP: (otp: string) => Promise<void>;
   resendOTP: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  // Advanced auth methods
+  signInPasswordless: (email: string) => Promise<void>;
+  completePasswordlessSignIn: (email: string, emailLink: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
+  signInWithBiometric: () => Promise<void>;
+  enableBiometric: () => Promise<void>;
+  disableBiometric: () => Promise<void>;
+  // Utility methods
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<User>) => Promise<void>;
+  verifyRecaptcha: (token: string) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -51,12 +75,13 @@ export function useAuth() {
 }
 
 interface AuthProviderProps {
-  children: ReactNode;
+  children: React.ReactNode;
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [pendingPhoneAuth, setPendingPhoneAuth] = useState<{
     phoneNumber: string;
     fullName?: string;
@@ -64,7 +89,30 @@ export function AuthProvider({ children }: AuthProviderProps) {
     verificationId?: string;
   } | null>(null);
 
+  // Initialize Google Sign-In
   useEffect(() => {
+    GoogleSignin.configure({
+      webClientId: 'YOUR_GOOGLE_WEB_CLIENT_ID', // Replace with your actual web client ID
+      offlineAccess: true,
+    });
+  }, []);
+
+  // Check biometric availability
+  useEffect(() => {
+    const checkBiometric = async () => {
+      try {
+        const isAvailable = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+        setBiometricAvailable(isAvailable && isEnrolled);
+      } catch (error) {
+        console.log('Biometric check error:', error);
+        setBiometricAvailable(false);
+      }
+    };
+    checkBiometric();
+  }, []);
+
+  React.useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
@@ -83,6 +131,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
               photoURL: firebaseUser.photoURL || undefined,
               kycStatus: userData.kycStatus || 'pending',
               walletId: userData.walletId,
+              biometricEnabled: userData.biometricEnabled || false,
+              lastLoginMethod: userData.lastLoginMethod,
             };
             setUser(user);
           } else {
@@ -96,6 +146,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
               createdAt: new Date().toISOString(),
               photoURL: firebaseUser.photoURL || undefined,
               kycStatus: 'pending',
+              biometricEnabled: false,
             };
             
             await setDoc(doc(db, 'users', firebaseUser.uid), {
@@ -105,6 +156,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
               isVerified: newUser.isVerified,
               createdAt: newUser.createdAt,
               kycStatus: newUser.kycStatus,
+              biometricEnabled: newUser.biometricEnabled,
             });
             
             setUser(newUser);
@@ -125,6 +177,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const signIn = async (email: string, password: string) => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      
+      // Update last login method
+      if (userCredential.user) {
+        await updateDoc(doc(db, 'users', userCredential.user.uid), {
+          lastLoginMethod: 'email'
+        });
+      }
       // User state will be updated through onAuthStateChanged
     } catch (error: any) {
       let errorMessage = 'Sign in failed';
@@ -166,6 +225,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         isVerified: userCredential.user.emailVerified,
         createdAt: new Date().toISOString(),
         kycStatus: 'pending',
+        biometricEnabled: false,
+        lastLoginMethod: 'email',
       });
       
       // User state will be updated through onAuthStateChanged
@@ -304,9 +365,166 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
+  // Passwordless email authentication
+  const signInPasswordless = async (email: string) => {
+    try {
+      const actionCodeSettings = {
+        url: 'https://yourapp.page.link/finishSignUp', // Replace with your deep link
+        handleCodeInApp: true,
+        iOS: {
+          bundleId: 'com.yourapp.bluebot'
+        },
+        android: {
+          packageName: 'com.yourapp.bluebot',
+          installApp: true,
+          minimumVersion: '12'
+        },
+        dynamicLinkDomain: 'yourapp.page.link' // Replace with your domain
+      };
+
+      await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+      // Store email for later use
+      await AsyncStorage.setItem('emailForSignIn', email);
+    } catch (error: any) {
+      throw new Error(error.message || 'Failed to send sign-in link');
+    }
+  };
+
+  const completePasswordlessSignIn = async (email: string, emailLink: string) => {
+    try {
+      if (isSignInWithEmailLink(auth, emailLink)) {
+        const result = await signInWithEmailLink(auth, email, emailLink);
+        await AsyncStorage.removeItem('emailForSignIn');
+        // User state will be updated through onAuthStateChanged
+      } else {
+        throw new Error('Invalid sign-in link');
+      }
+    } catch (error: any) {
+      throw new Error(error.message || 'Failed to complete passwordless sign-in');
+    }
+  };
+
+  // Google Sign-In
+  const signInWithGoogle = async () => {
+    try {
+      await GoogleSignin.hasPlayServices();
+      const userInfo = await GoogleSignin.signIn();
+      
+      if (userInfo.data?.idToken) {
+        const googleCredential = GoogleAuthProvider.credential(userInfo.data.idToken);
+        const result = await signInWithCredential(auth, googleCredential);
+        
+        // Update last login method
+        if (result.user) {
+          await updateDoc(doc(db, 'users', result.user.uid), {
+            lastLoginMethod: 'google'
+          });
+        }
+      }
+    } catch (error: any) {
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+        throw new Error('Google sign-in was cancelled');
+      } else if (error.code === statusCodes.IN_PROGRESS) {
+        throw new Error('Google sign-in is in progress');
+      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        throw new Error('Google Play Services not available');
+      } else {
+        throw new Error(error.message || 'Google sign-in failed');
+      }
+    }
+  };
+
+  // Biometric Authentication
+  const signInWithBiometric = async () => {
+    try {
+      if (!biometricAvailable) {
+        throw new Error('Biometric authentication not available');
+      }
+
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Sign in with biometric',
+        fallbackLabel: 'Use passcode',
+      });
+
+      if (result.success) {
+        // Get stored credentials
+        const storedCredentials = await AsyncStorage.getItem('biometricCredentials');
+        if (storedCredentials) {
+          const { email, hashedPassword } = JSON.parse(storedCredentials);
+          // In a real app, you'd have a secure way to authenticate with stored credentials
+          // For demo purposes, we'll just check if user exists
+          const userDoc = await getDoc(doc(db, 'users', email));
+          if (userDoc.exists()) {
+            // Update last login method
+            await updateDoc(doc(db, 'users', userDoc.id), {
+              lastLoginMethod: 'biometric'
+            });
+          }
+        } else {
+          throw new Error('No biometric credentials found');
+        }
+      } else {
+        throw new Error('Biometric authentication failed');
+      }
+    } catch (error: any) {
+      throw new Error(error.message || 'Biometric sign-in failed');
+    }
+  };
+
+  const enableBiometric = async () => {
+    try {
+      if (!user) throw new Error('No user signed in');
+      if (!biometricAvailable) throw new Error('Biometric authentication not available');
+
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Enable biometric authentication',
+        fallbackLabel: 'Use passcode',
+      });
+
+      if (result.success) {
+        // Store user credentials securely (in a real app, use more secure storage)
+        const credentials = {
+          email: user.email,
+          userId: user.id,
+        };
+        await AsyncStorage.setItem('biometricCredentials', JSON.stringify(credentials));
+        
+        // Update user profile
+        await updateProfile({ biometricEnabled: true });
+      } else {
+        throw new Error('Biometric setup cancelled');
+      }
+    } catch (error: any) {
+      throw new Error(error.message || 'Failed to enable biometric authentication');
+    }
+  };
+
+  const disableBiometric = async () => {
+    try {
+      await AsyncStorage.removeItem('biometricCredentials');
+      await updateProfile({ biometricEnabled: false });
+    } catch (error) {
+      throw new Error('Failed to disable biometric authentication');
+    }
+  };
+
+  // reCAPTCHA verification
+  const verifyRecaptcha = async (token: string): Promise<boolean> => {
+    try {
+      // In a real app, you'd verify this token with your backend
+      // For demo purposes, we'll just validate it's not empty
+      return token.length > 0;
+    } catch (error) {
+      console.error('reCAPTCHA verification failed:', error);
+      return false;
+    }
+  };
+
   const value: AuthContextType = {
     user,
     loading,
+    biometricAvailable,
+    // Traditional auth methods
     signIn,
     signUp,
     signInWithPhone,
@@ -314,8 +532,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
     verifyOTP,
     resendOTP,
     resetPassword,
+    // Advanced auth methods
+    signInPasswordless,
+    completePasswordlessSignIn,
+    signInWithGoogle,
+    signInWithBiometric,
+    enableBiometric,
+    disableBiometric,
+    // Utility methods
     signOut,
     updateProfile,
+    verifyRecaptcha,
   };
 
   return (
@@ -324,3 +551,4 @@ export function AuthProvider({ children }: AuthProviderProps) {
     </AuthContext.Provider>
   );
 }
+

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "BlueBot Finance Assistant",
-    "slug": "bluebot-finance",
+    "name": "Blue Bot",
+    "slug": "bluebot",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.standardbank.bluebot"
+      "bundleIdentifier": "com.omniverse.bluebot"
     },
     "android": {
       "adaptiveIcon": {

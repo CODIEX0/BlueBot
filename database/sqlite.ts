@@ -1,402 +1,523 @@
 import * as SQLite from 'expo-sqlite';
+import { useAuth } from '../contexts/AuthContext';
 
-const db = SQLite.openDatabase('bluebot.db');
+/**
+ * SQLite Database Manager for BlueBot
+ * Handles local data storage with offline-first approach
+ */
 
-// Initialize database tables
-export const initializeDatabase = async () => {
-  return new Promise((resolve, reject) => {
-    db.transaction(tx => {
-      // Users table (offline cache)
-      tx.executeSql(
-        `CREATE TABLE IF NOT EXISTS users (
-          id TEXT PRIMARY KEY,
-          email TEXT,
-          phone_number TEXT,
-          full_name TEXT NOT NULL,
-          is_verified INTEGER DEFAULT 0,
-          kyc_status TEXT DEFAULT 'pending',
-          wallet_id TEXT,
-          created_at TEXT NOT NULL,
-          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-        );`
+export interface ExpenseRecord {
+  id?: number;
+  firebaseId?: string;
+  amount: number;
+  category: string;
+  merchant: string;
+  description: string;
+  date: string;
+  receiptUrl?: string;
+  isRecurring: boolean;
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
+  syncStatus: 'synced' | 'pending' | 'error';
+}
+
+export interface ReceiptRecord {
+  id?: number;
+  firebaseId?: string;
+  imageUri: string;
+  merchantName: string;
+  amount: number;
+  date: string;
+  items: string; // JSON string
+  category: string;
+  processed: boolean;
+  ocrConfidence: number;
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
+  syncStatus: 'synced' | 'pending' | 'error';
+}
+
+export interface FinancialGoalRecord {
+  id?: number;
+  firebaseId?: string;
+  title: string;
+  description: string;
+  targetAmount: number;
+  currentAmount: number;
+  deadline: string;
+  category: string;
+  userId: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  syncStatus: 'synced' | 'pending' | 'error';
+}
+
+export interface TransactionRecord {
+  id?: number;
+  firebaseId?: string;
+  type: 'income' | 'expense' | 'transfer';
+  amount: number;
+  description: string;
+  category: string;
+  date: string;
+  fromAccount?: string;
+  toAccount?: string;
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
+  syncStatus: 'synced' | 'pending' | 'error';
+}
+
+export class SQLiteManager {
+  private db: SQLite.SQLiteDatabase | null = null;
+  private static instance: SQLiteManager;
+
+  static getInstance(): SQLiteManager {
+    if (!SQLiteManager.instance) {
+      SQLiteManager.instance = new SQLiteManager();
+    }
+    return SQLiteManager.instance;
+  }
+
+  async initializeDatabase(): Promise<void> {
+    try {
+      this.db = await SQLite.openDatabaseAsync('bluebotFinance.db');
+      
+      // Enable WAL mode for better performance
+      await this.db.execAsync('PRAGMA journal_mode = WAL;');
+      
+      // Create tables
+      await this.createTables();
+      
+      console.log('SQLite database initialized successfully');
+    } catch (error) {
+      console.error('Error initializing SQLite database:', error);
+      throw error;
+    }
+  }
+
+  private async createTables(): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const createTableSQL = `
+      -- Expenses table
+      CREATE TABLE IF NOT EXISTS expenses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        firebaseId TEXT UNIQUE,
+        amount REAL NOT NULL,
+        category TEXT NOT NULL,
+        merchant TEXT NOT NULL,
+        description TEXT,
+        date TEXT NOT NULL,
+        receiptUrl TEXT,
+        isRecurring INTEGER DEFAULT 0,
+        userId TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL,
+        syncStatus TEXT DEFAULT 'pending'
       );
-
-      // Expenses table
-      tx.executeSql(
-        `CREATE TABLE IF NOT EXISTS expenses (
-          id TEXT PRIMARY KEY,
-          user_id TEXT NOT NULL,
-          amount REAL NOT NULL,
-          description TEXT,
-          category TEXT NOT NULL,
-          receipt_url TEXT,
-          receipt_data TEXT,
-          created_at TEXT NOT NULL,
-          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          synced INTEGER DEFAULT 0,
-          FOREIGN KEY (user_id) REFERENCES users (id)
-        );`
+      
+      -- Receipts table
+      CREATE TABLE IF NOT EXISTS receipts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        firebaseId TEXT UNIQUE,
+        imageUri TEXT NOT NULL,
+        merchantName TEXT NOT NULL,
+        amount REAL NOT NULL,
+        date TEXT NOT NULL,
+        items TEXT,
+        category TEXT NOT NULL,
+        processed INTEGER DEFAULT 0,
+        ocrConfidence REAL DEFAULT 0,
+        userId TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL,
+        syncStatus TEXT DEFAULT 'pending'
       );
-
-      // Categories table
-      tx.executeSql(
-        `CREATE TABLE IF NOT EXISTS categories (
-          id TEXT PRIMARY KEY,
-          user_id TEXT NOT NULL,
-          name TEXT NOT NULL,
-          color TEXT NOT NULL,
-          icon TEXT NOT NULL,
-          budget_limit REAL DEFAULT 0,
-          created_at TEXT NOT NULL,
-          FOREIGN KEY (user_id) REFERENCES users (id)
-        );`
+      
+      -- Financial Goals table
+      CREATE TABLE IF NOT EXISTS financial_goals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        firebaseId TEXT UNIQUE,
+        title TEXT NOT NULL,
+        description TEXT,
+        targetAmount REAL NOT NULL,
+        currentAmount REAL DEFAULT 0,
+        deadline TEXT NOT NULL,
+        category TEXT NOT NULL,
+        userId TEXT NOT NULL,
+        isActive INTEGER DEFAULT 1,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL,
+        syncStatus TEXT DEFAULT 'pending'
       );
-
-      // Savings goals table
-      tx.executeSql(
-        `CREATE TABLE IF NOT EXISTS savings_goals (
-          id TEXT PRIMARY KEY,
-          user_id TEXT NOT NULL,
-          title TEXT NOT NULL,
-          description TEXT,
-          target_amount REAL NOT NULL,
-          current_amount REAL DEFAULT 0,
-          target_date TEXT,
-          is_locked INTEGER DEFAULT 0,
-          created_at TEXT NOT NULL,
-          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          synced INTEGER DEFAULT 0,
-          FOREIGN KEY (user_id) REFERENCES users (id)
-        );`
+      
+      -- Transactions table
+      CREATE TABLE IF NOT EXISTS transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        firebaseId TEXT UNIQUE,
+        type TEXT NOT NULL CHECK (type IN ('income', 'expense', 'transfer')),
+        amount REAL NOT NULL,
+        description TEXT NOT NULL,
+        category TEXT NOT NULL,
+        date TEXT NOT NULL,
+        fromAccount TEXT,
+        toAccount TEXT,
+        userId TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL,
+        syncStatus TEXT DEFAULT 'pending'
       );
-
-      // Transactions table (wallet transactions)
-      tx.executeSql(
-        `CREATE TABLE IF NOT EXISTS transactions (
-          id TEXT PRIMARY KEY,
-          user_id TEXT NOT NULL,
-          type TEXT NOT NULL,
-          amount REAL NOT NULL,
-          currency TEXT DEFAULT 'ZAR',
-          recipient TEXT,
-          recipient_id TEXT,
-          description TEXT,
-          status TEXT DEFAULT 'pending',
-          transaction_hash TEXT,
-          created_at TEXT NOT NULL,
-          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          synced INTEGER DEFAULT 0,
-          FOREIGN KEY (user_id) REFERENCES users (id)
-        );`
+      
+      -- Educational Progress table
+      CREATE TABLE IF NOT EXISTS educational_progress (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId TEXT NOT NULL,
+        courseId TEXT NOT NULL,
+        lessonId TEXT NOT NULL,
+        completed INTEGER DEFAULT 0,
+        score INTEGER DEFAULT 0,
+        completedAt TEXT,
+        createdAt TEXT NOT NULL,
+        UNIQUE(userId, courseId, lessonId)
       );
-
-      // Chat messages table (AI conversations)
-      tx.executeSql(
-        `CREATE TABLE IF NOT EXISTS chat_messages (
-          id TEXT PRIMARY KEY,
-          user_id TEXT NOT NULL,
-          message TEXT NOT NULL,
-          response TEXT NOT NULL,
-          context TEXT,
-          created_at TEXT NOT NULL,
-          FOREIGN KEY (user_id) REFERENCES users (id)
-        );`
+      
+      -- User Achievements table
+      CREATE TABLE IF NOT EXISTS user_achievements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId TEXT NOT NULL,
+        achievementId TEXT NOT NULL,
+        unlockedAt TEXT NOT NULL,
+        UNIQUE(userId, achievementId)
       );
-
-      // Financial education progress table
-      tx.executeSql(
-        `CREATE TABLE IF NOT EXISTS education_progress (
-          id TEXT PRIMARY KEY,
-          user_id TEXT NOT NULL,
-          course_id TEXT NOT NULL,
-          lesson_id TEXT NOT NULL,
-          completed INTEGER DEFAULT 0,
-          score INTEGER DEFAULT 0,
-          completed_at TEXT,
-          created_at TEXT NOT NULL,
-          FOREIGN KEY (user_id) REFERENCES users (id)
-        );`
+      
+      -- Crypto Wallets table (encrypted data)
+      CREATE TABLE IF NOT EXISTS crypto_wallets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId TEXT NOT NULL UNIQUE,
+        encryptedPrivateKey TEXT NOT NULL,
+        publicKey TEXT NOT NULL,
+        address TEXT NOT NULL,
+        network TEXT NOT NULL DEFAULT 'ethereum',
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
       );
+      
+      -- Create indexes for better performance
+      CREATE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses(userId, date DESC);
+      CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category);
+      CREATE INDEX IF NOT EXISTS idx_expenses_sync ON expenses(syncStatus);
+      
+      CREATE INDEX IF NOT EXISTS idx_receipts_user_date ON receipts(userId, date DESC);
+      CREATE INDEX IF NOT EXISTS idx_receipts_sync ON receipts(syncStatus);
+      
+      CREATE INDEX IF NOT EXISTS idx_goals_user ON financial_goals(userId);
+      CREATE INDEX IF NOT EXISTS idx_goals_active ON financial_goals(isActive);
+      
+      CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(userId, date DESC);
+      CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
+      CREATE INDEX IF NOT EXISTS idx_transactions_sync ON transactions(syncStatus);
+      
+      CREATE INDEX IF NOT EXISTS idx_educational_progress_user ON educational_progress(userId);
+      CREATE INDEX IF NOT EXISTS idx_achievements_user ON user_achievements(userId);
+      CREATE INDEX IF NOT EXISTS idx_crypto_wallets_user ON crypto_wallets(userId);
+    `;
 
-      // Gamification table (badges, points, achievements)
-      tx.executeSql(
-        `CREATE TABLE IF NOT EXISTS gamification (
-          id TEXT PRIMARY KEY,
-          user_id TEXT NOT NULL,
-          points INTEGER DEFAULT 0,
-          level INTEGER DEFAULT 1,
-          badges TEXT, -- JSON array of badge IDs
-          achievements TEXT, -- JSON array of achievement objects
-          streak_days INTEGER DEFAULT 0,
-          last_activity TEXT,
-          created_at TEXT NOT NULL,
-          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (user_id) REFERENCES users (id)
-        );`
-      );
+    await this.db.execAsync(createTableSQL);
+  }
 
-      // Crypto wallet data table
-      tx.executeSql(
-        `CREATE TABLE IF NOT EXISTS crypto_wallets (
-          id TEXT PRIMARY KEY,
-          user_id TEXT NOT NULL,
-          wallet_address TEXT NOT NULL,
-          wallet_type TEXT NOT NULL, -- 'ethereum', 'polygon', etc.
-          encrypted_private_key TEXT NOT NULL,
-          balance REAL DEFAULT 0,
-          created_at TEXT NOT NULL,
-          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          synced INTEGER DEFAULT 0,
-          FOREIGN KEY (user_id) REFERENCES users (id)
-        );`
-      );
+  // Expense operations
+  async addExpense(expense: Omit<ExpenseRecord, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
+    if (!this.db) throw new Error('Database not initialized');
 
-      // App settings table
-      tx.executeSql(
-        `CREATE TABLE IF NOT EXISTS app_settings (
-          id TEXT PRIMARY KEY,
-          user_id TEXT,
-          setting_key TEXT NOT NULL,
-          setting_value TEXT NOT NULL,
-          created_at TEXT NOT NULL,
-          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-        );`
-      );
+    const now = new Date().toISOString();
+    const result = await this.db.runAsync(
+      `INSERT INTO expenses (firebaseId, amount, category, merchant, description, date, receiptUrl, isRecurring, userId, createdAt, updatedAt, syncStatus)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        expense.firebaseId || null,
+        expense.amount,
+        expense.category,
+        expense.merchant,
+        expense.description,
+        expense.date,
+        expense.receiptUrl || null,
+        expense.isRecurring ? 1 : 0,
+        expense.userId,
+        now,
+        now,
+        expense.syncStatus
+      ]
+    );
 
-      // Insert default categories
-      tx.executeSql(
-        `INSERT OR IGNORE INTO categories (id, user_id, name, color, icon, created_at) VALUES
-          ('default_food', '', 'Food & Groceries', '#10B981', 'shopping-cart', datetime('now')),
-          ('default_transport', '', 'Transport', '#3B82F6', 'car', datetime('now')),
-          ('default_utilities', '', 'Utilities', '#F59E0B', 'zap', datetime('now')),
-          ('default_entertainment', '', 'Entertainment', '#8B5CF6', 'film', datetime('now')),
-          ('default_healthcare', '', 'Healthcare', '#EF4444', 'heart', datetime('now')),
-          ('default_education', '', 'Education', '#06B6D4', 'book', datetime('now')),
-          ('default_shopping', '', 'Shopping', '#EC4899', 'shopping-bag', datetime('now')),
-          ('default_savings', '', 'Savings', '#059669', 'piggy-bank', datetime('now')),
-          ('default_other', '', 'Other', '#6B7280', 'more-horizontal', datetime('now'));`
-      );
+    return result.lastInsertRowId;
+  }
 
-    }, (error) => {
-      console.error('Database initialization error:', error);
-      reject(error);
-    }, () => {
-      console.log('Database initialized successfully');
-      resolve(true);
-    });
-  });
-};
+  async getExpenses(userId: string, limit?: number): Promise<ExpenseRecord[]> {
+    if (!this.db) throw new Error('Database not initialized');
 
-// User operations
-export const insertUser = (user: any) => {
-  return new Promise((resolve, reject) => {
-    db.transaction(tx => {
-      tx.executeSql(
-        `INSERT OR REPLACE INTO users (id, email, phone_number, full_name, is_verified, kyc_status, wallet_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [user.id, user.email, user.phoneNumber, user.fullName, user.isVerified ? 1 : 0, user.kycStatus, user.walletId, user.createdAt],
-        (_, result) => resolve(result),
-        (_, error) => reject(error)
-      );
-    });
-  });
-};
+    const query = limit 
+      ? `SELECT * FROM expenses WHERE userId = ? ORDER BY date DESC, createdAt DESC LIMIT ?`
+      : `SELECT * FROM expenses WHERE userId = ? ORDER BY date DESC, createdAt DESC`;
+    
+    const params = limit ? [userId, limit] : [userId];
+    const results = await this.db.getAllAsync(query, params);
 
-export const getUser = (userId: string) => {
-  return new Promise((resolve, reject) => {
-    db.transaction(tx => {
-      tx.executeSql(
-        'SELECT * FROM users WHERE id = ?',
-        [userId],
-        (_, result) => {
-          if (result.rows.length > 0) {
-            const user = result.rows.item(0);
-            resolve({
-              ...user,
-              isVerified: user.is_verified === 1,
-            });
-          } else {
-            resolve(null);
-          }
-        },
-        (_, error) => reject(error)
-      );
-    });
-  });
-};
+    return results.map(this.mapExpenseResult);
+  }
 
-// Expense operations
-export const insertExpense = (expense: any) => {
-  return new Promise((resolve, reject) => {
-    db.transaction(tx => {
-      tx.executeSql(
-        `INSERT INTO expenses (id, user_id, amount, description, category, receipt_url, receipt_data, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [expense.id, expense.userId, expense.amount, expense.description, expense.category, expense.receiptUrl, expense.receiptData, expense.createdAt],
-        (_, result) => resolve(result),
-        (_, error) => reject(error)
-      );
-    });
-  });
-};
+  async updateExpense(id: number, updates: Partial<ExpenseRecord>): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
 
-export const getExpenses = (userId: string, limit: number = 50) => {
-  return new Promise((resolve, reject) => {
-    db.transaction(tx => {
-      tx.executeSql(
-        'SELECT * FROM expenses WHERE user_id = ? ORDER BY created_at DESC LIMIT ?',
-        [userId, limit],
-        (_, result) => {
-          const expenses = [];
-          for (let i = 0; i < result.rows.length; i++) {
-            expenses.push(result.rows.item(i));
-          }
-          resolve(expenses);
-        },
-        (_, error) => reject(error)
-      );
-    });
-  });
-};
+    const updateFields = Object.keys(updates).filter(key => key !== 'id');
+    const setClause = updateFields.map(field => `${field} = ?`).join(', ');
+    const values = updateFields.map(field => updates[field as keyof ExpenseRecord]);
 
-// Savings goal operations
-export const insertSavingsGoal = (goal: any) => {
-  return new Promise((resolve, reject) => {
-    db.transaction(tx => {
-      tx.executeSql(
-        `INSERT INTO savings_goals (id, user_id, title, description, target_amount, current_amount, target_date, is_locked, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [goal.id, goal.userId, goal.title, goal.description, goal.targetAmount, goal.currentAmount, goal.targetDate, goal.isLocked ? 1 : 0, goal.createdAt],
-        (_, result) => resolve(result),
-        (_, error) => reject(error)
-      );
-    });
-  });
-};
+    await this.db.runAsync(
+      `UPDATE expenses SET ${setClause}, updatedAt = ? WHERE id = ?`,
+      [...values, new Date().toISOString(), id]
+    );
+  }
 
-export const getSavingsGoals = (userId: string) => {
-  return new Promise((resolve, reject) => {
-    db.transaction(tx => {
-      tx.executeSql(
-        'SELECT * FROM savings_goals WHERE user_id = ? ORDER BY created_at DESC',
-        [userId],
-        (_, result) => {
-          const goals = [];
-          for (let i = 0; i < result.rows.length; i++) {
-            const goal = result.rows.item(i);
-            goals.push({
-              ...goal,
-              isLocked: goal.is_locked === 1,
-            });
-          }
-          resolve(goals);
-        },
-        (_, error) => reject(error)
-      );
-    });
-  });
-};
+  async deleteExpense(id: number): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
 
-// Transaction operations
-export const insertTransaction = (transaction: any) => {
-  return new Promise((resolve, reject) => {
-    db.transaction(tx => {
-      tx.executeSql(
-        `INSERT INTO transactions (id, user_id, type, amount, currency, recipient, recipient_id, description, status, transaction_hash, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [transaction.id, transaction.userId, transaction.type, transaction.amount, transaction.currency, transaction.recipient, transaction.recipientId, transaction.description, transaction.status, transaction.transactionHash, transaction.createdAt],
-        (_, result) => resolve(result),
-        (_, error) => reject(error)
-      );
-    });
-  });
-};
+    await this.db.runAsync('DELETE FROM expenses WHERE id = ?', [id]);
+  }
 
-export const getTransactions = (userId: string, limit: number = 50) => {
-  return new Promise((resolve, reject) => {
-    db.transaction(tx => {
-      tx.executeSql(
-        'SELECT * FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT ?',
-        [userId, limit],
-        (_, result) => {
-          const transactions = [];
-          for (let i = 0; i < result.rows.length; i++) {
-            transactions.push(result.rows.item(i));
-          }
-          resolve(transactions);
-        },
-        (_, error) => reject(error)
-      );
-    });
-  });
-};
+  // Receipt operations
+  async addReceipt(receipt: Omit<ReceiptRecord, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
+    if (!this.db) throw new Error('Database not initialized');
 
-// Chat message operations
-export const insertChatMessage = (message: any) => {
-  return new Promise((resolve, reject) => {
-    db.transaction(tx => {
-      tx.executeSql(
-        `INSERT INTO chat_messages (id, user_id, message, response, context, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [message.id, message.userId, message.message, message.response, message.context, message.createdAt],
-        (_, result) => resolve(result),
-        (_, error) => reject(error)
-      );
-    });
-  });
-};
+    const now = new Date().toISOString();
+    const result = await this.db.runAsync(
+      `INSERT INTO receipts (firebaseId, imageUri, merchantName, amount, date, items, category, processed, ocrConfidence, userId, createdAt, updatedAt, syncStatus)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        receipt.firebaseId || null,
+        receipt.imageUri,
+        receipt.merchantName,
+        receipt.amount,
+        receipt.date,
+        receipt.items,
+        receipt.category,
+        receipt.processed ? 1 : 0,
+        receipt.ocrConfidence,
+        receipt.userId,
+        now,
+        now,
+        receipt.syncStatus
+      ]
+    );
 
-export const getChatHistory = (userId: string, limit: number = 100) => {
-  return new Promise((resolve, reject) => {
-    db.transaction(tx => {
-      tx.executeSql(
-        'SELECT * FROM chat_messages WHERE user_id = ? ORDER BY created_at ASC LIMIT ?',
-        [userId, limit],
-        (_, result) => {
-          const messages = [];
-          for (let i = 0; i < result.rows.length; i++) {
-            messages.push(result.rows.item(i));
-          }
-          resolve(messages);
-        },
-        (_, error) => reject(error)
-      );
-    });
-  });
-};
+    return result.lastInsertRowId;
+  }
 
-// Settings operations
-export const setSetting = (userId: string, key: string, value: string) => {
-  return new Promise((resolve, reject) => {
-    db.transaction(tx => {
-      tx.executeSql(
-        `INSERT OR REPLACE INTO app_settings (id, user_id, setting_key, setting_value, created_at)
-         VALUES (?, ?, ?, ?, datetime('now'))`,
-        [`${userId}_${key}`, userId, key, value],
-        (_, result) => resolve(result),
-        (_, error) => reject(error)
-      );
-    });
-  });
-};
+  async getReceipts(userId: string, limit?: number): Promise<ReceiptRecord[]> {
+    if (!this.db) throw new Error('Database not initialized');
 
-export const getSetting = (userId: string, key: string) => {
-  return new Promise((resolve, reject) => {
-    db.transaction(tx => {
-      tx.executeSql(
-        'SELECT setting_value FROM app_settings WHERE user_id = ? AND setting_key = ?',
-        [userId, key],
-        (_, result) => {
-          if (result.rows.length > 0) {
-            resolve(result.rows.item(0).setting_value);
-          } else {
-            resolve(null);
-          }
-        },
-        (_, error) => reject(error)
-      );
-    });
-  });
-};
+    const query = limit 
+      ? `SELECT * FROM receipts WHERE userId = ? ORDER BY date DESC, createdAt DESC LIMIT ?`
+      : `SELECT * FROM receipts WHERE userId = ? ORDER BY date DESC, createdAt DESC`;
+    
+    const params = limit ? [userId, limit] : [userId];
+    const results = await this.db.getAllAsync(query, params);
 
-export default db;
+    return results.map(this.mapReceiptResult);
+  }
+
+  // Financial Goal operations
+  async addFinancialGoal(goal: Omit<FinancialGoalRecord, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const now = new Date().toISOString();
+    const result = await this.db.runAsync(
+      `INSERT INTO financial_goals (firebaseId, title, description, targetAmount, currentAmount, deadline, category, userId, isActive, createdAt, updatedAt, syncStatus)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        goal.firebaseId || null,
+        goal.title,
+        goal.description,
+        goal.targetAmount,
+        goal.currentAmount,
+        goal.deadline,
+        goal.category,
+        goal.userId,
+        goal.isActive ? 1 : 0,
+        now,
+        now,
+        goal.syncStatus
+      ]
+    );
+
+    return result.lastInsertRowId;
+  }
+
+  async getFinancialGoals(userId: string): Promise<FinancialGoalRecord[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const results = await this.db.getAllAsync(
+      'SELECT * FROM financial_goals WHERE userId = ? ORDER BY createdAt DESC',
+      [userId]
+    );
+
+    return results.map(this.mapFinancialGoalResult);
+  }
+
+  // Transaction operations
+  async addTransaction(transaction: Omit<TransactionRecord, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const now = new Date().toISOString();
+    const result = await this.db.runAsync(
+      `INSERT INTO transactions (firebaseId, type, amount, description, category, date, fromAccount, toAccount, userId, createdAt, updatedAt, syncStatus)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        transaction.firebaseId || null,
+        transaction.type,
+        transaction.amount,
+        transaction.description,
+        transaction.category,
+        transaction.date,
+        transaction.fromAccount || null,
+        transaction.toAccount || null,
+        transaction.userId,
+        now,
+        now,
+        transaction.syncStatus
+      ]
+    );
+
+    return result.lastInsertRowId;
+  }
+
+  async getTransactions(userId: string, limit?: number): Promise<TransactionRecord[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const query = limit 
+      ? `SELECT * FROM transactions WHERE userId = ? ORDER BY date DESC, createdAt DESC LIMIT ?`
+      : `SELECT * FROM transactions WHERE userId = ? ORDER BY date DESC, createdAt DESC`;
+    
+    const params = limit ? [userId, limit] : [userId];
+    const results = await this.db.getAllAsync(query, params);
+
+    return results.map(this.mapTransactionResult);
+  }
+
+  // Utility methods
+  async getPendingSyncItems(userId: string): Promise<{
+    expenses: ExpenseRecord[];
+    receipts: ReceiptRecord[];
+    goals: FinancialGoalRecord[];
+    transactions: TransactionRecord[];
+  }> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const [expenses, receipts, goals, transactions] = await Promise.all([
+      this.db.getAllAsync('SELECT * FROM expenses WHERE userId = ? AND syncStatus = ?', [userId, 'pending']),
+      this.db.getAllAsync('SELECT * FROM receipts WHERE userId = ? AND syncStatus = ?', [userId, 'pending']),
+      this.db.getAllAsync('SELECT * FROM financial_goals WHERE userId = ? AND syncStatus = ?', [userId, 'pending']),
+      this.db.getAllAsync('SELECT * FROM transactions WHERE userId = ? AND syncStatus = ?', [userId, 'pending'])
+    ]);
+
+    return {
+      expenses: expenses.map(this.mapExpenseResult),
+      receipts: receipts.map(this.mapReceiptResult),
+      goals: goals.map(this.mapFinancialGoalResult),
+      transactions: transactions.map(this.mapTransactionResult)
+    };
+  }
+
+  async clearUserData(userId: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    await this.db.runAsync(`
+      DELETE FROM expenses WHERE userId = ?;
+      DELETE FROM receipts WHERE userId = ?;
+      DELETE FROM financial_goals WHERE userId = ?;
+      DELETE FROM transactions WHERE userId = ?;
+      DELETE FROM educational_progress WHERE userId = ?;
+      DELETE FROM user_achievements WHERE userId = ?;
+      DELETE FROM crypto_wallets WHERE userId = ?;
+    `, [userId, userId, userId, userId, userId, userId, userId]);
+  }
+
+  // Result mapping methods
+  private mapExpenseResult(row: any): ExpenseRecord {
+    return {
+      id: row.id,
+      firebaseId: row.firebaseId,
+      amount: row.amount,
+      category: row.category,
+      merchant: row.merchant,
+      description: row.description,
+      date: row.date,
+      receiptUrl: row.receiptUrl,
+      isRecurring: Boolean(row.isRecurring),
+      userId: row.userId,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      syncStatus: row.syncStatus as 'synced' | 'pending' | 'error'
+    };
+  }
+
+  private mapReceiptResult(row: any): ReceiptRecord {
+    return {
+      id: row.id,
+      firebaseId: row.firebaseId,
+      imageUri: row.imageUri,
+      merchantName: row.merchantName,
+      amount: row.amount,
+      date: row.date,
+      items: row.items,
+      category: row.category,
+      processed: Boolean(row.processed),
+      ocrConfidence: row.ocrConfidence,
+      userId: row.userId,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      syncStatus: row.syncStatus as 'synced' | 'pending' | 'error'
+    };
+  }
+
+  private mapFinancialGoalResult(row: any): FinancialGoalRecord {
+    return {
+      id: row.id,
+      firebaseId: row.firebaseId,
+      title: row.title,
+      description: row.description,
+      targetAmount: row.targetAmount,
+      currentAmount: row.currentAmount,
+      deadline: row.deadline,
+      category: row.category,
+      userId: row.userId,
+      isActive: Boolean(row.isActive),
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      syncStatus: row.syncStatus as 'synced' | 'pending' | 'error'
+    };
+  }
+
+  private mapTransactionResult(row: any): TransactionRecord {
+    return {
+      id: row.id,
+      firebaseId: row.firebaseId,
+      type: row.type as 'income' | 'expense' | 'transfer',
+      amount: row.amount,
+      description: row.description,
+      category: row.category,
+      date: row.date,
+      fromAccount: row.fromAccount,
+      toAccount: row.toAccount,
+      userId: row.userId,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      syncStatus: row.syncStatus as 'synced' | 'pending' | 'error'
+    };
+  }
+}
+
+export default SQLiteManager.getInstance();

@@ -1,344 +1,293 @@
-import React, { useState } from 'react';
+/**
+ * Profile Screen - User profile and security settings
+ * Includes biometric authentication settings and other security features
+ */
+
+import React from 'react';
+const { useState } = React;
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   SafeAreaView,
-  Switch,
+  ScrollView,
   Alert,
+  Image,
 } from 'react-native';
-import {
-  User,
-  Settings,
-  Bell,
-  Shield,
-  CreditCard,
-  HelpCircle,
-  Award,
-  Target,
-  Book,
-  ChevronRight,
-  LogOut,
-  Star,
-  Trophy,
-  Flame,
-} from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useMobileAuth } from '@/contexts/MobileAuthContext';
+import BiometricSettings from '@/components/BiometricSettings';
 
-interface Achievement {
-  id: string;
-  title: string;
-  description: string;
-  icon: React.ReactNode;
-  unlocked: boolean;
-  progress?: number;
-  total?: number;
-}
+export default function ProfileScreen() {
+  const [isLoading, setIsLoading] = useState(false);
+  const { user, signOut, biometricAvailable } = useMobileAuth();
+  const router = useRouter();
 
-interface FinancialGoal {
-  id: string;
-  title: string;
-  target: number;
-  current: number;
-  deadline: string;
-}
-
-export default function Profile() {
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [biometricEnabled, setBiometricEnabled] = useState(true);
-  const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
-
-  const userInfo = {
-    name: 'Thabo Mthembu',
-    email: 'thabo.mthembu@email.com',
-    phone: '+27 71 234 5678',
-    memberSince: '2024',
-    kycStatus: 'verified',
-  };
-
-  const achievements: Achievement[] = [
-    {
-      id: '1',
-      title: 'First Receipt Scan',
-      description: 'Scanned your first receipt',
-      icon: <Trophy size={20} color="#FFD700" />,
-      unlocked: true,
-    },
-    {
-      id: '2',
-      title: 'Savings Streak',
-      description: 'Saved money for 7 days straight',
-      icon: <Flame size={20} color="#FF4500" />,
-      unlocked: true,
-    },
-    {
-      id: '3',
-      title: 'Budget Master',
-      description: 'Stayed within budget for a full month',
-      icon: <Star size={20} color="#8B5CF6" />,
-      unlocked: false,
-      progress: 18,
-      total: 30,
-    },
-    {
-      id: '4',
-      title: 'AI Helper',
-      description: 'Asked BlueBot 50 questions',
-      icon: <Award size={20} color="#10B981" />,
-      unlocked: false,
-      progress: 32,
-      total: 50,
-    },
-  ];
-
-  const financialGoals: FinancialGoal[] = [
-    {
-      id: '1',
-      title: 'Emergency Fund',
-      target: 10000,
-      current: 7250,
-      deadline: '2025-06-30',
-    },
-    {
-      id: '2',
-      title: 'Vacation Savings',
-      target: 5000,
-      current: 1200,
-      deadline: '2025-12-15',
-    },
-  ];
-
-  const formatCurrency = (amount: number) => {
-    return `R${amount.toLocaleString('en-ZA', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-  };
-
-  const getProgressPercentage = (current: number, target: number) => {
-    return Math.min((current / target) * 100, 100);
-  };
-
-  const handleLogout = () => {
+  const handleSignOut = async () => {
     Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
+      'Sign Out',
+      'Are you sure you want to sign out?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', style: 'destructive', onPress: () => {} },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            setIsLoading(true);
+            try {
+              await signOut();
+              router.replace('/login');
+            } catch (error: any) {
+              Alert.alert('Error', 'Failed to sign out');
+            } finally {
+              setIsLoading(false);
+            }
+          },
+        },
       ]
     );
   };
 
+  const handleEditProfile = () => {
+    // Navigate to edit profile screen
+    Alert.alert('Edit Profile', 'Edit profile functionality coming soon!');
+  };
+
+  const getLastLoginMethodDisplay = (method?: string) => {
+    switch (method) {
+      case 'email':
+        return { icon: 'mail', text: 'Email & Password', color: '#3B82F6' };
+      case 'phone':
+        return { icon: 'phone-portrait', text: 'Phone Number', color: '#10B981' };
+      case 'google':
+        return { icon: 'logo-google', text: 'Google Account', color: '#DB4437' };
+      case 'passwordless':
+        return { icon: 'link', text: 'Passwordless Email', color: '#8B5CF6' };
+      case 'biometric':
+        return { icon: 'finger-print', text: 'Biometric', color: '#F59E0B' };
+      default:
+        return { icon: 'person', text: 'Unknown', color: '#6B7280' };
+    }
+  };
+
+  const lastLoginMethod = getLastLoginMethodDisplay(user?.lastLoginMethod);
+
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
+      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
+        <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>Profile</Text>
-          <TouchableOpacity style={styles.headerButton}>
-            <Settings size={20} color="#1E3A8A" />
+          <TouchableOpacity style={styles.editButton} onPress={handleEditProfile}>
+            <Ionicons name="pencil" size={20} color="#ffffff" />
           </TouchableOpacity>
         </View>
+      </LinearGradient>
 
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* User Info Card */}
         <View style={styles.userCard}>
-          <View style={styles.userAvatar}>
-            <User size={32} color="#1E3A8A" />
-          </View>
-          <View style={styles.userInfo}>
-            <Text style={styles.userName}>{userInfo.name}</Text>
-            <Text style={styles.userEmail}>{userInfo.email}</Text>
-            <View style={styles.verificationBadge}>
-              <Shield size={14} color="#10B981" />
-              <Text style={styles.verificationText}>Verified Account</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Achievements Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Achievements</Text>
-          <View style={styles.achievementsGrid}>
-            {achievements.map((achievement) => (
-              <View
-                key={achievement.id}
-                style={[
-                  styles.achievementCard,
-                  !achievement.unlocked && styles.achievementCardLocked,
-                ]}
-              >
-                <View style={styles.achievementIcon}>
-                  {achievement.icon}
-                </View>
-                <Text
-                  style={[
-                    styles.achievementTitle,
-                    !achievement.unlocked && styles.achievementTitleLocked,
-                  ]}
-                >
-                  {achievement.title}
-                </Text>
-                <Text
-                  style={[
-                    styles.achievementDescription,
-                    !achievement.unlocked && styles.achievementDescriptionLocked,
-                  ]}
-                >
-                  {achievement.description}
-                </Text>
-                {!achievement.unlocked && achievement.progress && achievement.total && (
-                  <View style={styles.progressContainer}>
-                    <View style={styles.progressBar}>
-                      <View
-                        style={[
-                          styles.progressFill,
-                          {
-                            width: `${(achievement.progress / achievement.total) * 100}%`,
-                          },
-                        ]}
-                      />
-                    </View>
-                    <Text style={styles.progressText}>
-                      {achievement.progress}/{achievement.total}
-                    </Text>
-                  </View>
-                )}
+          <View style={styles.avatarContainer}>
+            {user?.photoURL ? (
+              <Image source={{ uri: user.photoURL }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Ionicons name="person" size={40} color="#667eea" />
               </View>
-            ))}
+            )}
+            <View style={styles.onlineIndicator} />
           </View>
-        </View>
-
-        {/* Financial Goals */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Financial Goals</Text>
-            <TouchableOpacity>
-              <Text style={styles.seeAllText}>Add Goal</Text>
-            </TouchableOpacity>
-          </View>
-          {financialGoals.map((goal) => (
-            <View key={goal.id} style={styles.goalCard}>
-              <View style={styles.goalHeader}>
-                <Text style={styles.goalTitle}>{goal.title}</Text>
-                <Text style={styles.goalAmount}>
-                  {formatCurrency(goal.current)} / {formatCurrency(goal.target)}
-                </Text>
-              </View>
-              <View style={styles.goalProgressContainer}>
-                <View style={styles.goalProgressBar}>
-                  <View
-                    style={[
-                      styles.goalProgressFill,
-                      {
-                        width: `${getProgressPercentage(goal.current, goal.target)}%`,
-                      },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.goalProgressText}>
-                  {Math.round(getProgressPercentage(goal.current, goal.target))}%
-                </Text>
-              </View>
-              <Text style={styles.goalDeadline}>Target: {goal.deadline}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* Settings */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Settings</Text>
           
-          <View style={styles.settingItem}>
-            <View style={styles.settingInfo}>
-              <Bell size={20} color="#1E3A8A" />
-              <Text style={styles.settingText}>Notifications</Text>
+          <View style={styles.userInfo}>
+            <Text style={styles.userName}>{user?.fullName || 'User'}</Text>
+            <Text style={styles.userEmail}>{user?.email || 'No email'}</Text>
+            
+            <View style={styles.verificationBadge}>
+              <Ionicons 
+                name={user?.isVerified ? "checkmark-circle" : "alert-circle"} 
+                size={16} 
+                color={user?.isVerified ? "#10B981" : "#F59E0B"} 
+              />
+              <Text style={[
+                styles.verificationText,
+                { color: user?.isVerified ? "#10B981" : "#F59E0B" }
+              ]}>
+                {user?.isVerified ? 'Verified Account' : 'Unverified Account'}
+              </Text>
             </View>
-            <Switch
-              value={notificationsEnabled}
-              onValueChange={setNotificationsEnabled}
-              trackColor={{ false: '#E2E8F0', true: '#0EA5E9' }}
-              thumbColor={notificationsEnabled ? '#FFFFFF' : '#FFFFFF'}
-            />
-          </View>
 
-          <View style={styles.settingItem}>
-            <View style={styles.settingInfo}>
-              <Shield size={20} color="#1E3A8A" />
-              <Text style={styles.settingText}>Biometric Login</Text>
+            {/* Last Login Method */}
+            <View style={styles.lastLoginContainer}>
+              <Ionicons name={lastLoginMethod.icon as any} size={14} color={lastLoginMethod.color} />
+              <Text style={styles.lastLoginText}>
+                Last signed in with {lastLoginMethod.text}
+              </Text>
             </View>
-            <Switch
-              value={biometricEnabled}
-              onValueChange={setBiometricEnabled}
-              trackColor={{ false: '#E2E8F0', true: '#0EA5E9' }}
-              thumbColor={biometricEnabled ? '#FFFFFF' : '#FFFFFF'}
-            />
-          </View>
-
-          <View style={styles.settingItem}>
-            <View style={styles.settingInfo}>
-              <Target size={20} color="#1E3A8A" />
-              <Text style={styles.settingText}>Auto-Save</Text>
-            </View>
-            <Switch
-              value={autoSaveEnabled}
-              onValueChange={setAutoSaveEnabled}
-              trackColor={{ false: '#E2E8F0', true: '#0EA5E9' }}
-              thumbColor={autoSaveEnabled ? '#FFFFFF' : '#FFFFFF'}
-            />
           </View>
         </View>
 
-        {/* Menu Items */}
-        <View style={styles.section}>
-          <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuInfo}>
-              <CreditCard size={20} color="#1E3A8A" />
-              <Text style={styles.menuText}>Payment Methods</Text>
+        {/* Account Stats */}
+        <View style={styles.statsContainer}>
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{user?.kycStatus?.toUpperCase() || 'PENDING'}</Text>
+            <Text style={styles.statLabel}>KYC Status</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>
+              {user?.createdAt ? new Date(user.createdAt).getFullYear() : '2024'}
+            </Text>
+            <Text style={styles.statLabel}>Member Since</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{user?.walletId ? 'ACTIVE' : 'INACTIVE'}</Text>
+            <Text style={styles.statLabel}>Wallet</Text>
+          </View>
+        </View>
+
+        {/* Security Settings */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Security Settings</Text>
+          
+          {/* Biometric Authentication */}
+          <BiometricSettings onSettingsChange={(enabled) => {
+            console.log('Biometric authentication', enabled ? 'enabled' : 'disabled');
+          }} />
+
+          {/* Other Security Options */}
+          <TouchableOpacity style={styles.settingItem}>
+            <View style={styles.settingLeft}>
+              <View style={[styles.settingIcon, { backgroundColor: '#FEF3C7' }]}>
+                <Ionicons name="key" size={20} color="#F59E0B" />
+              </View>
+              <View>
+                <Text style={styles.settingTitle}>Change Password</Text>
+                <Text style={styles.settingSubtitle}>Update your account password</Text>
+              </View>
             </View>
-            <ChevronRight size={20} color="#64748B" />
+            <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuInfo}>
-              <Book size={20} color="#1E3A8A" />
-              <Text style={styles.menuText}>Financial Education</Text>
+          <TouchableOpacity style={styles.settingItem}>
+            <View style={styles.settingLeft}>
+              <View style={[styles.settingIcon, { backgroundColor: '#E0E7FF' }]}>
+                <Ionicons name="phone-portrait" size={20} color="#6366F1" />
+              </View>
+              <View>
+                <Text style={styles.settingTitle}>Two-Factor Authentication</Text>
+                <Text style={styles.settingSubtitle}>Add an extra layer of security</Text>
+              </View>
             </View>
-            <ChevronRight size={20} color="#64748B" />
+            <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuInfo}>
-              <HelpCircle size={20} color="#1E3A8A" />
-              <Text style={styles.menuText}>Help & Support</Text>
+          <TouchableOpacity style={styles.settingItem}>
+            <View style={styles.settingLeft}>
+              <View style={[styles.settingIcon, { backgroundColor: '#FECACA' }]}>
+                <Ionicons name="shield-checkmark" size={20} color="#EF4444" />
+              </View>
+              <View>
+                <Text style={styles.settingTitle}>Login Activity</Text>
+                <Text style={styles.settingSubtitle}>Review recent sign-in attempts</Text>
+              </View>
             </View>
-            <ChevronRight size={20} color="#64748B" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuInfo}>
-              <Shield size={20} color="#1E3A8A" />
-              <Text style={styles.menuText}>Privacy & Security</Text>
-            </View>
-            <ChevronRight size={20} color="#64748B" />
+            <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
           </TouchableOpacity>
         </View>
 
-        {/* Logout */}
-        <View style={styles.section}>
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <LogOut size={20} color="#EF4444" />
-            <Text style={styles.logoutText}>Logout</Text>
+        {/* App Settings */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>App Settings</Text>
+          
+          <TouchableOpacity style={styles.settingItem}>
+            <View style={styles.settingLeft}>
+              <View style={[styles.settingIcon, { backgroundColor: '#F3E8FF' }]}>
+                <Ionicons name="notifications" size={20} color="#8B5CF6" />
+              </View>
+              <View>
+                <Text style={styles.settingTitle}>Notifications</Text>
+                <Text style={styles.settingSubtitle}>Manage your notification preferences</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.settingItem}>
+            <View style={styles.settingLeft}>
+              <View style={[styles.settingIcon, { backgroundColor: '#F0F9FF' }]}>
+                <Ionicons name="moon" size={20} color="#0EA5E9" />
+              </View>
+              <View>
+                <Text style={styles.settingTitle}>Theme</Text>
+                <Text style={styles.settingSubtitle}>Light or dark mode</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.settingItem}>
+            <View style={styles.settingLeft}>
+              <View style={[styles.settingIcon, { backgroundColor: '#ECFDF5' }]}>
+                <Ionicons name="language" size={20} color="#10B981" />
+              </View>
+              <View>
+                <Text style={styles.settingTitle}>Language</Text>
+                <Text style={styles.settingSubtitle}>English (US)</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
           </TouchableOpacity>
         </View>
 
-        {/* App Info */}
-        <View style={styles.appInfo}>
-          <Text style={styles.appInfoText}>BlueBot v1.0.0</Text>
-          <Text style={styles.appInfoText}>
-            Member since {userInfo.memberSince} • Standard Bank
+        {/* Support */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Support</Text>
+          
+          <TouchableOpacity style={styles.settingItem}>
+            <View style={styles.settingLeft}>
+              <View style={[styles.settingIcon, { backgroundColor: '#FEF3C7' }]}>
+                <Ionicons name="help-circle" size={20} color="#F59E0B" />
+              </View>
+              <View>
+                <Text style={styles.settingTitle}>Help Center</Text>
+                <Text style={styles.settingSubtitle}>Get help and support</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.settingItem}>
+            <View style={styles.settingLeft}>
+              <View style={[styles.settingIcon, { backgroundColor: '#E0E7FF' }]}>
+                <Ionicons name="chatbubble-ellipses" size={20} color="#6366F1" />
+              </View>
+              <View>
+                <Text style={styles.settingTitle}>Contact Us</Text>
+                <Text style={styles.settingSubtitle}>Send feedback or report issues</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Sign Out */}
+        <TouchableOpacity 
+          style={styles.signOutButton} 
+          onPress={handleSignOut}
+          disabled={isLoading}
+        >
+          <Ionicons name="log-out" size={20} color="#EF4444" />
+          <Text style={styles.signOutText}>
+            {isLoading ? 'Signing Out...' : 'Sign Out'}
           </Text>
+        </TouchableOpacity>
+
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>BlueBot v1.0.0</Text>
+          <Text style={styles.footerText}>Made with ❤️ for financial wellness</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -348,296 +297,215 @@ export default function Profile() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#F9FAFB',
   },
   header: {
+    paddingTop: 60,
+    paddingBottom: 30,
+    paddingHorizontal: 20,
+  },
+  headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
   },
   headerTitle: {
-    fontSize: 24,
-    color: '#1E3A8A',
-    fontWeight: '700',
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#ffffff',
   },
-  headerButton: {
+  editButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 20,
+    marginTop: -20,
   },
   userCard: {
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 20,
-    marginBottom: 24,
+    backgroundColor: '#ffffff',
     borderRadius: 16,
     padding: 20,
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.1,
     shadowRadius: 8,
-    elevation: 2,
+    elevation: 4,
   },
-  userAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#E0F2FE',
+  avatarContainer: {
+    position: 'relative',
+    marginRight: 16,
+  },
+  avatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+  },
+  avatarPlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+  },
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#10B981',
+    borderWidth: 2,
+    borderColor: '#ffffff',
   },
   userInfo: {
     flex: 1,
   },
   userName: {
-    fontSize: 20,
-    color: '#1E3A8A',
+    fontSize: 18,
     fontWeight: '600',
+    color: '#111827',
     marginBottom: 4,
   },
   userEmail: {
     fontSize: 14,
-    color: '#64748B',
+    color: '#6B7280',
     marginBottom: 8,
   },
   verificationBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 6,
   },
   verificationText: {
     fontSize: 12,
-    color: '#10B981',
     fontWeight: '500',
     marginLeft: 4,
   },
-  section: {
-    paddingHorizontal: 20,
+  lastLoginContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  lastLoginText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginLeft: 6,
+  },
+  statsContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  statDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: '#E5E7EB',
+  },
+  sectionContainer: {
     marginBottom: 24,
   },
   sectionTitle: {
-    fontSize: 20,
-    color: '#1E3A8A',
+    fontSize: 18,
     fontWeight: '600',
-    marginBottom: 16,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  seeAllText: {
-    fontSize: 14,
-    color: '#0EA5E9',
-    fontWeight: '500',
-  },
-  achievementsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  achievementCard: {
-    width: '48%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
+    color: '#111827',
     marginBottom: 12,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  achievementCardLocked: {
-    opacity: 0.6,
-  },
-  achievementIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#F8FAFC',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  achievementTitle: {
-    fontSize: 14,
-    color: '#1E3A8A',
-    fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  achievementTitleLocked: {
-    color: '#64748B',
-  },
-  achievementDescription: {
-    fontSize: 12,
-    color: '#64748B',
-    textAlign: 'center',
-    lineHeight: 16,
-  },
-  achievementDescriptionLocked: {
-    color: '#94A3B8',
-  },
-  progressContainer: {
-    width: '100%',
-    marginTop: 8,
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: '#E2E8F0',
-    borderRadius: 2,
-    marginBottom: 4,
-  },
-  progressFill: {
-    height: 4,
-    backgroundColor: '#0EA5E9',
-    borderRadius: 2,
-  },
-  progressText: {
-    fontSize: 10,
-    color: '#64748B',
-    textAlign: 'center',
-  },
-  goalCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  goalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  goalTitle: {
-    fontSize: 16,
-    color: '#1E3A8A',
-    fontWeight: '600',
-  },
-  goalAmount: {
-    fontSize: 14,
-    color: '#64748B',
-    fontWeight: '500',
-  },
-  goalProgressContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  goalProgressBar: {
-    flex: 1,
-    height: 6,
-    backgroundColor: '#E2E8F0',
-    borderRadius: 3,
-    marginRight: 12,
-  },
-  goalProgressFill: {
-    height: 6,
-    backgroundColor: '#10B981',
-    borderRadius: 3,
-  },
-  goalProgressText: {
-    fontSize: 14,
-    color: '#1E3A8A',
-    fontWeight: '600',
-  },
-  goalDeadline: {
-    fontSize: 12,
-    color: '#64748B',
+    paddingHorizontal: 4,
   },
   settingItem: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 8,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
+    shadowOpacity: 0.05,
     shadowRadius: 4,
-    elevation: 1,
+    elevation: 2,
   },
-  settingInfo: {
+  settingLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
-  settingText: {
+  settingIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  settingTitle: {
     fontSize: 16,
-    color: '#1E3A8A',
     fontWeight: '500',
-    marginLeft: 12,
+    color: '#111827',
+    marginBottom: 2,
   },
-  menuItem: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 1,
+  settingSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
   },
-  menuInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  menuText: {
-    fontSize: 16,
-    color: '#1E3A8A',
-    fontWeight: '500',
-    marginLeft: 12,
-  },
-  logoutButton: {
-    backgroundColor: '#FFFFFF',
+  signOutButton: {
+    backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 32,
     borderWidth: 1,
     borderColor: '#FEE2E2',
   },
-  logoutText: {
+  signOutText: {
     fontSize: 16,
-    color: '#EF4444',
     fontWeight: '500',
+    color: '#EF4444',
     marginLeft: 8,
   },
-  appInfo: {
+  footer: {
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingBottom: 32,
   },
-  appInfoText: {
+  footerText: {
     fontSize: 12,
-    color: '#64748B',
-    textAlign: 'center',
-    lineHeight: 16,
+    color: '#9CA3AF',
+    marginBottom: 4,
   },
 });

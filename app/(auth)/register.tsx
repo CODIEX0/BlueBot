@@ -1,4 +1,10 @@
-import React, { useState } from 'react';
+/**
+ * Register Screen - User registration with email/password
+ * Includes form validation and terms acceptance
+ */
+
+import React from 'react';
+const { useState } = React;
 import {
   View,
   Text,
@@ -7,314 +13,248 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Alert,
-  Platform,
   KeyboardAvoidingView,
+  Platform,
   ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Link, router } from 'expo-router';
-import { useAuth } from '@/contexts/AuthContext';
-import { 
-  Eye, 
-  EyeOff, 
-  Phone, 
-  Mail, 
-  Lock, 
-  User,
-  Bot,
-  Check
-} from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Link, useRouter } from 'expo-router';
+import { useMobileAuth } from '@/contexts/MobileAuthContext';
 
 export default function RegisterScreen() {
-  const { signUp, signUpWithPhone } = useAuth();
-  const [registrationMethod, setRegistrationMethod] = useState<'phone' | 'email'>('phone');
   const [fullName, setFullName] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [agreeToTerms, setAgreeToTerms] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [acceptTerms, setAcceptTerms] = useState(false);
+  const { signUp } = useMobileAuth();
+  const router = useRouter();
 
-  const validateForm = () => {
-    if (!fullName.trim()) {
-      Alert.alert('Error', 'Please enter your full name');
-      return false;
-    }
+  const isValidEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
 
-    if (registrationMethod === 'phone') {
-      if (!phoneNumber.trim()) {
-        Alert.alert('Error', 'Please enter your phone number');
-        return false;
-      }
-      if (phoneNumber.length < 10) {
-        Alert.alert('Error', 'Please enter a valid phone number');
-        return false;
-      }
-    } else {
-      if (!email.trim()) {
-        Alert.alert('Error', 'Please enter your email address');
-        return false;
-      }
-      if (!email.includes('@')) {
-        Alert.alert('Error', 'Please enter a valid email address');
-        return false;
-      }
-      if (!password.trim()) {
-        Alert.alert('Error', 'Please enter a password');
-        return false;
-      }
-      if (password.length < 6) {
-        Alert.alert('Error', 'Password must be at least 6 characters');
-        return false;
-      }
-      if (password !== confirmPassword) {
-        Alert.alert('Error', 'Passwords do not match');
-        return false;
-      }
-    }
-
-    if (!agreeToTerms) {
-      Alert.alert('Error', 'Please agree to the terms and conditions');
-      return false;
-    }
-
-    return true;
+  const isValidPassword = (password: string) => {
+    return password.length >= 6;
   };
 
   const handleRegister = async () => {
-    if (!validateForm()) return;
+    if (!fullName || !email || !password || !confirmPassword) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
 
-    setLoading(true);
-    
+    if (!isValidEmail(email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+
+    if (!isValidPassword(password)) {
+      Alert.alert('Error', 'Password must be at least 6 characters long');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    if (!acceptTerms) {
+      Alert.alert('Error', 'Please accept the terms and conditions');
+      return;
+    }
+
+    setIsLoading(true);
     try {
-      if (registrationMethod === 'phone') {
-        // Format phone number for South Africa
-        const formattedPhone = phoneNumber.startsWith('+27') 
-          ? phoneNumber 
-          : `+27${phoneNumber.replace(/^0/, '')}`;
-        
-        await signUpWithPhone(formattedPhone, fullName);
-        router.push('/(auth)/verify-otp');
-      } else {
-        await signUp(email, password, fullName);
-        router.push('/onboarding');
-      }
+      await signUp(email, password, fullName);
+      Alert.alert(
+        'Success',
+        'Account created successfully! Please check your email for verification.',
+        [{ text: 'OK', onPress: () => router.replace('/(auth)/login') }]
+      );
     } catch (error: any) {
-      Alert.alert('Registration Failed', error.message || 'Please try again');
+      Alert.alert('Registration Failed', error.message || 'Failed to create account');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardContainer}
-      >
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
-          {/* Header */}
-          <View style={styles.header}>
-            <LinearGradient
-              colors={['#002d72', '#0066cc']}
-              style={styles.logoContainer}
-            >
-              <Bot size={48} color="#ffffff" />
-            </LinearGradient>
-            <Text style={styles.title}>Join BlueBot</Text>
-            <Text style={styles.subtitle}>Start your financial journey today</Text>
-          </View>
-
-          {/* Registration Method Toggle */}
-          <View style={styles.toggleContainer}>
-            <TouchableOpacity
-              style={[
-                styles.toggleButton,
-                registrationMethod === 'phone' && styles.toggleButtonActive
-              ]}
-              onPress={() => setRegistrationMethod('phone')}
-            >
-              <Phone size={20} color={registrationMethod === 'phone' ? '#ffffff' : '#002d72'} />
-              <Text style={[
-                styles.toggleText,
-                registrationMethod === 'phone' && styles.toggleTextActive
-              ]}>
-                Phone
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.toggleButton,
-                registrationMethod === 'email' && styles.toggleButtonActive
-              ]}
-              onPress={() => setRegistrationMethod('email')}
-            >
-              <Mail size={20} color={registrationMethod === 'email' ? '#ffffff' : '#002d72'} />
-              <Text style={[
-                styles.toggleText,
-                registrationMethod === 'email' && styles.toggleTextActive
-              ]}>
-                Email
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Registration Form */}
-          <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <User size={20} color="#666" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Full name"
-                value={fullName}
-                onChangeText={setFullName}
-                autoCapitalize="words"
-                autoComplete="name"
-              />
+      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.gradient}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardView}
+        >
+          <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+            {/* Header */}
+            <View style={styles.header}>
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => router.back()}
+              >
+                <Ionicons name="arrow-back" size={24} color="#ffffff" />
+              </TouchableOpacity>
             </View>
 
-            {registrationMethod === 'phone' ? (
+            {/* Logo and Title */}
+            <View style={styles.logoContainer}>
+              <View style={styles.logo}>
+                <Ionicons name="wallet" size={40} color="#ffffff" />
+              </View>
+              <Text style={styles.title}>Create Account</Text>
+              <Text style={styles.subtitle}>Join BlueBot and start managing your finances</Text>
+            </View>
+
+            {/* Registration Form */}
+            <View style={styles.formContainer}>
+              {/* Full Name Input */}
               <View style={styles.inputContainer}>
-                <Phone size={20} color="#666" style={styles.inputIcon} />
+                <Ionicons name="person-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Phone number (e.g., 0712345678)"
-                  value={phoneNumber}
-                  onChangeText={setPhoneNumber}
-                  keyboardType="phone-pad"
-                  autoComplete="tel"
+                  placeholder="Full Name"
+                  placeholderTextColor="#9CA3AF"
+                  value={fullName}
+                  onChangeText={setFullName}
+                  autoCapitalize="words"
+                  autoComplete="name"
                 />
               </View>
-            ) : (
-              <>
-                <View style={styles.inputContainer}>
-                  <Mail size={20} color="#666" style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Email address"
-                    value={email}
-                    onChangeText={setEmail}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoComplete="email"
-                  />
-                </View>
-                <View style={styles.inputContainer}>
-                  <Lock size={20} color="#666" style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Password (min. 6 characters)"
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry={!showPassword}
-                    autoComplete="new-password"
-                  />
-                  <TouchableOpacity
-                    style={styles.eyeButton}
-                    onPress={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? (
-                      <EyeOff size={20} color="#666" />
-                    ) : (
-                      <Eye size={20} color="#666" />
-                    )}
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.inputContainer}>
-                  <Lock size={20} color="#666" style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Confirm password"
-                    value={confirmPassword}
-                    onChangeText={setConfirmPassword}
-                    secureTextEntry={!showConfirmPassword}
-                    autoComplete="new-password"
-                  />
-                  <TouchableOpacity
-                    style={styles.eyeButton}
-                    onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                  >
-                    {showConfirmPassword ? (
-                      <EyeOff size={20} color="#666" />
-                    ) : (
-                      <Eye size={20} color="#666" />
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
 
-            {/* Terms and Conditions */}
-            <TouchableOpacity
-              style={styles.checkboxContainer}
-              onPress={() => setAgreeToTerms(!agreeToTerms)}
-            >
-              <View style={[styles.checkbox, agreeToTerms && styles.checkboxChecked]}>
-                {agreeToTerms && <Check size={16} color="#ffffff" />}
+              {/* Email Input */}
+              <View style={styles.inputContainer}>
+                <Ionicons name="mail-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email Address"
+                  placeholderTextColor="#9CA3AF"
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                />
               </View>
-              <Text style={styles.checkboxText}>
-                I agree to the{' '}
-                <Link href="/privacy-policy" asChild>
-                  <Text style={styles.link}>Terms & Conditions</Text>
-                </Link>
-                {' '}and{' '}
-                <Link href="/privacy-policy" asChild>
-                  <Text style={styles.link}>Privacy Policy</Text>
-                </Link>
-              </Text>
-            </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.registerButton, loading && styles.registerButtonDisabled]}
-              onPress={handleRegister}
-              disabled={loading}
-            >
-              <LinearGradient
-                colors={['#002d72', '#0066cc']}
-                style={styles.registerButtonGradient}
+              {/* Password Input */}
+              <View style={styles.inputContainer}>
+                <Ionicons name="lock-closed-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Password"
+                  placeholderTextColor="#9CA3AF"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  autoComplete="new-password"
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.eyeIcon}
+                >
+                  <Ionicons
+                    name={showPassword ? "eye-off-outline" : "eye-outline"}
+                    size={20}
+                    color="#9CA3AF"
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {/* Confirm Password Input */}
+              <View style={styles.inputContainer}>
+                <Ionicons name="lock-closed-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Confirm Password"
+                  placeholderTextColor="#9CA3AF"
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry={!showConfirmPassword}
+                  autoComplete="new-password"
+                />
+                <TouchableOpacity
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={styles.eyeIcon}
+                >
+                  <Ionicons
+                    name={showConfirmPassword ? "eye-off-outline" : "eye-outline"}
+                    size={20}
+                    color="#9CA3AF"
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {/* Terms and Conditions */}
+              <TouchableOpacity
+                style={styles.checkboxContainer}
+                onPress={() => setAcceptTerms(!acceptTerms)}
               >
-                <Text style={styles.registerButtonText}>
-                  {loading ? 'Creating Account...' : 'Create Account'}
+                <View style={[styles.checkbox, acceptTerms && styles.checkboxChecked]}>
+                  {acceptTerms && <Ionicons name="checkmark" size={16} color="#ffffff" />}
+                </View>
+                <Text style={styles.checkboxText}>
+                  I agree to the{' '}
+                  <Link href="/terms-conditions" style={styles.link}>
+                    Terms & Conditions
+                  </Link>{' '}
+                  and{' '}
+                  <Link href="/privacy-policy" style={styles.link}>
+                    Privacy Policy
+                  </Link>
                 </Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-
-          {/* Sign In Link */}
-          <View style={styles.signinContainer}>
-            <Text style={styles.signinText}>Already have an account? </Text>
-            <Link href="/(auth)/login" asChild>
-              <TouchableOpacity>
-                <Text style={styles.signinLink}>Sign In</Text>
               </TouchableOpacity>
-            </Link>
-          </View>
 
-          {/* Benefits */}
-          <View style={styles.benefitsContainer}>
-            <Text style={styles.benefitsTitle}>Why choose BlueBot?</Text>
-            <View style={styles.benefitItem}>
-              <Check size={16} color="#10b981" />
-              <Text style={styles.benefitText}>AI-powered financial coaching</Text>
+              {/* Register Button */}
+              <TouchableOpacity
+                style={[styles.registerButton, isLoading && styles.disabledButton]}
+                onPress={handleRegister}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <Text style={styles.buttonText}>Creating Account...</Text>
+                ) : (
+                  <>
+                    <Text style={styles.buttonText}>Create Account</Text>
+                    <Ionicons name="arrow-forward" size={20} color="#ffffff" />
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Divider */}
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              {/* Social Login Buttons */}
+              <TouchableOpacity style={styles.socialButton}>
+                <Ionicons name="logo-google" size={20} color="#4285F4" />
+                <Text style={styles.socialButtonText}>Continue with Google</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.socialButton}>
+                <Ionicons name="logo-apple" size={20} color="#000000" />
+                <Text style={styles.socialButtonText}>Continue with Apple</Text>
+              </TouchableOpacity>
+
+              {/* Login Link */}
+              <View style={styles.loginContainer}>
+                <Text style={styles.loginText}>Already have an account? </Text>
+                <Link href="/(auth)/login" style={styles.loginLink}>
+                  Sign In
+                </Link>
+              </View>
             </View>
-            <View style={styles.benefitItem}>
-              <Check size={16} color="#10b981" />
-              <Text style={styles.benefitText}>Smart expense tracking</Text>
-            </View>
-            <View style={styles.benefitItem}>
-              <Check size={16} color="#10b981" />
-              <Text style={styles.benefitText}>Digital wallet for everyone</Text>
-            </View>
-            <View style={styles.benefitItem}>
-              <Check size={16} color="#10b981" />
-              <Text style={styles.benefitText}>Community banking & stokvels</Text>
-            </View>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </LinearGradient>
     </SafeAreaView>
   );
 }
@@ -322,79 +262,62 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
   },
-  keyboardContainer: {
+  gradient: {
+    flex: 1,
+  },
+  keyboardView: {
     flex: 1,
   },
   scrollContainer: {
     flexGrow: 1,
-    padding: 24,
+    paddingHorizontal: 20,
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
     alignItems: 'center',
-    marginBottom: 32,
-    marginTop: 20,
+    paddingTop: 10,
+    paddingBottom: 20,
+  },
+  backButton: {
+    padding: 8,
   },
   logoContainer: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  logo: {
     width: 80,
     height: 80,
     borderRadius: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   title: {
     fontSize: 28,
-    fontWeight: '700',
-    color: '#002d72',
+    fontWeight: 'bold',
+    color: '#ffffff',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
   },
-  toggleContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#e6eff6',
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 24,
-  },
-  toggleButton: {
+  formContainer: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
-    gap: 8,
-  },
-  toggleButtonActive: {
-    backgroundColor: '#002d72',
-  },
-  toggleText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#002d72',
-  },
-  toggleTextActive: {
-    color: '#ffffff',
-  },
-  form: {
-    gap: 16,
-    marginBottom: 24,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    marginBottom: 16,
+    height: 56,
   },
   inputIcon: {
     marginRight: 12,
@@ -402,96 +325,109 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 16,
-    paddingVertical: 16,
-    color: '#002d72',
+    color: '#374151',
   },
-  eyeButton: {
+  eyeIcon: {
     padding: 4,
   },
   checkboxContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginTop: 8,
+    alignItems: 'center',
+    marginBottom: 24,
   },
   checkbox: {
     width: 20,
     height: 20,
     borderRadius: 4,
     borderWidth: 2,
-    borderColor: '#e2e8f0',
-    marginRight: 12,
-    marginTop: 2,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 12,
   },
   checkboxChecked: {
-    backgroundColor: '#002d72',
-    borderColor: '#002d72',
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
   },
   checkboxText: {
     flex: 1,
     fontSize: 14,
-    color: '#666',
+    color: 'rgba(255, 255, 255, 0.9)',
     lineHeight: 20,
   },
   link: {
-    color: '#0066cc',
-    fontWeight: '500',
+    color: '#93C5FD',
+    textDecorationLine: 'underline',
   },
   registerButton: {
+    backgroundColor: '#10B981',
     borderRadius: 12,
-    overflow: 'hidden',
-    marginTop: 8,
-  },
-  registerButtonDisabled: {
-    opacity: 0.6,
-  },
-  registerButtonGradient: {
     paddingVertical: 16,
-    alignItems: 'center',
-  },
-  registerButtonText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#ffffff',
-  },
-  signinContainer: {
+    paddingHorizontal: 24,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  signinText: {
-    fontSize: 14,
-    color: '#666',
+  disabledButton: {
+    backgroundColor: '#9CA3AF',
   },
-  signinLink: {
-    fontSize: 14,
-    color: '#0066cc',
+  buttonText: {
+    color: '#ffffff',
+    fontSize: 16,
     fontWeight: '600',
+    marginRight: 8,
   },
-  benefitsContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  benefitsTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#002d72',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  benefitItem: {
+  divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 24,
   },
-  benefitText: {
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  dividerText: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    paddingHorizontal: 16,
     fontSize: 14,
-    color: '#666',
+  },
+  socialButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  socialButtonText: {
+    color: '#374151',
+    fontSize: 16,
+    fontWeight: '500',
     marginLeft: 12,
+  },
+  loginContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 40,
+  },
+  loginText: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 16,
+  },
+  loginLink: {
+    color: '#93C5FD',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

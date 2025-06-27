@@ -1,4 +1,10 @@
-import React, { useState, useEffect } from 'react';
+/**
+ * Main Dashboard - BlueBot Home Screen
+ * Integrated analytics, insights, and gamification features
+ */
+
+import React from 'react';
+const { useState, useEffect } = React;
 import {
   View,
   Text,
@@ -6,250 +12,332 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  Alert,
   Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import {
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  Target,
-  AlertTriangle,
-  Star,
-  Gift,
-  Bell,
-  Eye,
-  EyeOff,
-} from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
+
+// Import our contexts
+import { useMobileDatabase } from '@/contexts/MobileDatabaseContext';
+import { useMobileAuth } from '@/contexts/MobileAuthContext';
+import GamificationWidget from '@/components/GamificationWidget';
 
 const { width } = Dimensions.get('window');
 
-interface AIInsight {
-  id: string;
-  type: 'tip' | 'warning' | 'achievement';
-  title: string;
-  message: string;
-  icon: React.ReactNode;
+interface QuickStat {
+  label: string;
+  value: string;
+  change: string;
+  changeType: 'positive' | 'negative' | 'neutral' | 'warning';
+  icon: keyof typeof Ionicons.glyphMap;
 }
 
-interface Transaction {
+interface FinancialInsight {
   id: string;
-  merchant: string;
-  amount: number;
-  category: string;
-  date: string;
-  type: 'debit' | 'credit';
+  type: 'positive' | 'negative' | 'warning' | 'tip';
+  title: string;
+  message: string;
+  icon: keyof typeof Ionicons.glyphMap;
 }
 
 export default function Dashboard() {
-  const [balanceVisible, setBalanceVisible] = useState(true);
-  const [currentBalance, setCurrentBalance] = useState(12847.50);
-  const [monthlySpending, setMonthlySpending] = useState(4567.30);
-  const [savingsGoal, setSavingsGoal] = useState({ target: 10000, current: 7250 });
-  const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([
-    {
-      id: '1',
-      merchant: 'Checkers',
-      amount: -234.50,
-      category: 'Groceries',
-      date: '2025-01-20',
-      type: 'debit',
-    },
-    {
-      id: '2',
-      merchant: 'Uber',
-      amount: -87.50,
-      category: 'Transport',
-      date: '2025-01-20',
-      type: 'debit',
-    },
-    {
-      id: '3',
-      merchant: 'Salary',
-      amount: 15000,
-      category: 'Income',
-      date: '2025-01-19',
-      type: 'credit',
-    },
-  ]);
+  const { user } = useMobileAuth();
+  const { expenses, getExpensesByDateRange, getCategoryTotals } = useMobileDatabase();
+  const [totalBalance, setTotalBalance] = useState(15420.50);
+  const [monthlyBudget] = useState(8000);
+  const [insights, setInsights] = useState<FinancialInsight[]>([]);
+  const [userXP, setUserXP] = useState(450); // User's gamification XP
 
-  const [aiInsights, setAiInsights] = useState<AIInsight[]>([
-    {
-      id: '1',
-      type: 'tip',
-      title: 'Smart Savings Tip',
-      message: 'You could save R380 this month by reducing takeout orders.',
-      icon: <TrendingUp size={20} color="#10B981" />,
-    },
-    {
-      id: '2',
-      type: 'warning',
-      title: 'Budget Alert',
-      message: 'You\'ve spent 75% of your entertainment budget this month.',
-      icon: <AlertTriangle size={20} color="#F59E0B" />,
-    },
-    {
-      id: '3',
-      type: 'achievement',
-      title: 'Goal Achievement',
-      message: 'Congratulations! You reached your grocery savings goal.',
-      icon: <Star size={20} color="#8B5CF6" />,
-    },
-  ]);
+  // Calculate current month expenses
+  const currentDate = new Date();
+  const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+  const lastDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+  
+  const monthlyExpenses = getExpensesByDateRange(
+    firstDayOfMonth.toISOString().split('T')[0],
+    lastDayOfMonth.toISOString().split('T')[0]
+  );
 
-  const savingsProgress = (savingsGoal.current / savingsGoal.target) * 100;
+  const monthlySpent = monthlyExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+  const budgetUsed = (monthlySpent / monthlyBudget) * 100;
+  const remaining = monthlyBudget - monthlySpent;
 
-  const formatCurrency = (amount: number) => {
-    return `R${Math.abs(amount).toLocaleString('en-ZA', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
+  // Generate insights based on spending patterns
+  useEffect(() => {
+    generateInsights();
+  }, [expenses]);
+
+  const generateInsights = () => {
+    const newInsights: FinancialInsight[] = [];
+
+    // Budget insight
+    if (budgetUsed > 90) {
+      newInsights.push({
+        id: 'budget-warning',
+        type: 'warning',
+        title: 'Budget Alert',
+        message: `You've used ${budgetUsed.toFixed(0)}% of your monthly budget. Consider reducing discretionary spending.`,
+        icon: 'warning-outline'
+      });
+    } else if (budgetUsed < 70) {
+      newInsights.push({
+        id: 'budget-good',
+        type: 'positive',
+        title: 'Great Progress!',
+        message: `You're doing well! Only ${budgetUsed.toFixed(0)}% of budget used with ${new Date(lastDayOfMonth.getTime() - currentDate.getTime()).getDate()} days left.`,
+        icon: 'checkmark-circle-outline'
+      });
+    }
+
+    // Category spending insight
+    const categoryTotals = getCategoryTotals();
+    const topCategory = Object.entries(categoryTotals).sort(([,a], [,b]) => (b as number) - (a as number))[0];
+    
+    if (topCategory && (topCategory[1] as number) > monthlyBudget * 0.3) {
+      newInsights.push({
+        id: 'category-spending',
+        type: 'tip',
+        title: 'Spending Pattern',
+        message: `${topCategory[0]} is your highest expense category at R${(topCategory[1] as number).toFixed(2)}. Consider setting a specific budget for this category.`,
+        icon: 'analytics-outline'
+      });
+    }
+
+    // Savings opportunity
+    if (remaining > 0) {
+      newInsights.push({
+        id: 'savings-tip',
+        type: 'tip',
+        title: 'Savings Opportunity',
+        message: `You have R${remaining.toFixed(2)} left in your budget. Consider transferring it to your emergency fund or TFSA.`,
+        icon: 'wallet-outline'
+      });
+    }
+
+    setInsights(newInsights);
   };
 
-  const getInsightColor = (type: string) => {
-    switch (type) {
-      case 'tip':
-        return '#10B981';
-      case 'warning':
-        return '#F59E0B';
-      case 'achievement':
-        return '#8B5CF6';
-      default:
-        return '#1E3A8A';
+  const quickStats: QuickStat[] = [
+    {
+      label: 'Total Balance',
+      value: `R${totalBalance.toFixed(2)}`,
+      change: '+R234.50',
+      changeType: 'positive',
+      icon: 'wallet-outline'
+    },
+    {
+      label: 'Monthly Spent',
+      value: `R${monthlySpent.toFixed(2)}`,
+      change: `${budgetUsed.toFixed(0)}% of budget`,
+      changeType: budgetUsed > 90 ? 'negative' : budgetUsed > 75 ? 'warning' : 'positive',
+      icon: 'card-outline'
+    },
+    {
+      label: 'Budget Remaining',
+      value: `R${remaining.toFixed(2)}`,
+      change: `${Math.max(lastDayOfMonth.getDate() - currentDate.getDate(), 0)} days left`,
+      changeType: remaining > 0 ? 'positive' : 'negative',
+      icon: 'trending-up-outline'
+    },
+    {
+      label: 'This Week',
+      value: 'R456.30',
+      change: '-12% vs last week',
+      changeType: 'positive',
+      icon: 'calendar-outline'
     }
+  ];
+
+  const getInsightColors = (type: string) => {
+    switch (type) {
+      case 'positive':
+        return { bg: '#F0FDF4', border: '#10B981', text: '#047857' };
+      case 'negative':
+        return { bg: '#FEF2F2', border: '#EF4444', text: '#DC2626' };
+      case 'warning':
+        return { bg: '#FFFBEB', border: '#F59E0B', text: '#D97706' };
+      case 'tip':
+        return { bg: '#F0F9FF', border: '#0EA5E9', text: '#0284C7' };
+      default:
+        return { bg: '#F8FAFC', border: '#64748B', text: '#334155' };
+    }
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-ZA', {
+      style: 'currency',
+      currency: 'ZAR',
+      minimumFractionDigits: 2
+    }).format(amount);
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>Good morning</Text>
-            <Text style={styles.userName}>Welcome back!</Text>
-          </View>
-          <TouchableOpacity style={styles.notificationButton}>
-            <Bell size={24} color="#1E3A8A" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Balance Card */}
         <LinearGradient
-          colors={['#1E3A8A', '#0EA5E9']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.balanceCard}
+          colors={['#1E3A8A', '#3B82F6']}
+          style={styles.header}
         >
-          <View style={styles.balanceHeader}>
-            <Text style={styles.balanceLabel}>Total Balance</Text>
-            <TouchableOpacity
-              onPress={() => setBalanceVisible(!balanceVisible)}
-              style={styles.eyeButton}
-            >
-              {balanceVisible ? (
-                <Eye size={20} color="#FFFFFF" />
-              ) : (
-                <EyeOff size={20} color="#FFFFFF" />
-              )}
+          <View style={styles.headerContent}>
+            <View>
+              <Text style={styles.greeting}>Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 17 ? 'Afternoon' : 'Evening'}</Text>
+              <Text style={styles.userName}>{user?.name || 'Welcome to BlueBot'}</Text>
+            </View>
+            <TouchableOpacity style={styles.notificationButton}>
+              <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
-          <Text style={styles.balanceAmount}>
-            {balanceVisible ? formatCurrency(currentBalance) : '••••••'}
-          </Text>
-          <View style={styles.balanceFooter}>
-            <View style={styles.balanceItem}>
-              <TrendingUp size={16} color="#10B981" />
-              <Text style={styles.balanceSubtext}>+12.5% this month</Text>
+
+          {/* Quick Balance Overview */}
+          <View style={styles.balanceCard}>
+            <Text style={styles.balanceLabel}>Total Balance</Text>
+            <Text style={styles.balanceAmount}>{formatCurrency(totalBalance)}</Text>
+            <View style={styles.balanceChange}>
+              <Ionicons name="trending-up" size={16} color="#10B981" />
+              <Text style={styles.balanceChangeText}>+2.3% this month</Text>
             </View>
           </View>
         </LinearGradient>
 
-        {/* Quick Actions */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.quickActions}>
-            <TouchableOpacity style={styles.actionButton}>
-              <DollarSign size={24} color="#1E3A8A" />
-              <Text style={styles.actionText}>Send Money</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton}>
-              <Target size={24} color="#1E3A8A" />
-              <Text style={styles.actionText}>Set Goal</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton}>
-              <Gift size={24} color="#1E3A8A" />
-              <Text style={styles.actionText}>Rewards</Text>
-            </TouchableOpacity>
+        {/* Gamification Widget */}
+        <View style={styles.gamificationContainer}>
+          <GamificationWidget 
+            currentXP={userXP} 
+            onXPChange={setUserXP}
+          />
+        </View>
+
+        {/* Quick Stats */}
+        <View style={styles.quickStatsContainer}>
+          <Text style={styles.sectionTitle}>Overview</Text>
+          <View style={styles.quickStatsGrid}>
+            {quickStats.map((stat, index) => (
+              <View key={index} style={styles.quickStatCard}>
+                <View style={styles.quickStatHeader}>
+                  <Ionicons 
+                    name={stat.icon} 
+                    size={20} 
+                    color="#64748B" 
+                  />
+                  <Text style={styles.quickStatLabel}>{stat.label}</Text>
+                </View>
+                <Text style={styles.quickStatValue}>{stat.value}</Text>
+                <Text style={[
+                  styles.quickStatChange,
+                  {
+                    color: stat.changeType === 'positive' ? '#10B981' : 
+                           stat.changeType === 'negative' ? '#EF4444' : '#F59E0B'
+                  }
+                ]}>
+                  {stat.change}
+                </Text>
+              </View>
+            ))}
           </View>
         </View>
 
-        {/* AI Insights */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>BlueBot Insights</Text>
-          {aiInsights.map((insight) => (
-            <TouchableOpacity key={insight.id} style={styles.insightCard}>
-              <View style={styles.insightIcon}>
-                {insight.icon}
-              </View>
-              <View style={styles.insightContent}>
-                <Text style={styles.insightTitle}>{insight.title}</Text>
-                <Text style={styles.insightMessage}>{insight.message}</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Savings Goal */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Savings Goal Progress</Text>
-          <View style={styles.goalCard}>
-            <View style={styles.goalHeader}>
-              <Text style={styles.goalTitle}>Emergency Fund</Text>
-              <Text style={styles.goalAmount}>
-                {formatCurrency(savingsGoal.current)} / {formatCurrency(savingsGoal.target)}
-              </Text>
-            </View>
-            <View style={styles.progressContainer}>
-              <View style={styles.progressBar}>
+        {/* Financial Insights */}
+        {insights.length > 0 && (
+          <View style={styles.insightsContainer}>
+            <Text style={styles.sectionTitle}>AI Insights</Text>
+            {insights.map((insight) => {
+              const colors = getInsightColors(insight.type);
+              return (
                 <View
+                  key={insight.id}
                   style={[
-                    styles.progressFill,
-                    { width: `${Math.min(savingsProgress, 100)}%` },
+                    styles.insightCard,
+                    {
+                      backgroundColor: colors.bg,
+                      borderLeftColor: colors.border,
+                    }
                   ]}
-                />
-              </View>
-              <Text style={styles.progressText}>{Math.round(savingsProgress)}%</Text>
-            </View>
+                >
+                  <View style={styles.insightHeader}>
+                    <Ionicons name={insight.icon} size={20} color={colors.text} />
+                    <Text style={[styles.insightTitle, { color: colors.text }]}>
+                      {insight.title}
+                    </Text>
+                  </View>
+                  <Text style={[styles.insightMessage, { color: colors.text }]}>
+                    {insight.message}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Quick Actions */}
+        <View style={styles.actionsContainer}>
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <View style={styles.actionGrid}>
+            <TouchableOpacity style={styles.actionButton}>
+              <LinearGradient
+                colors={['#10B981', '#059669']}
+                style={styles.actionGradient}
+              >
+                <Ionicons name="add-outline" size={24} color="#FFFFFF" />
+                <Text style={styles.actionText}>Add Expense</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionButton}>
+              <LinearGradient
+                colors={['#0EA5E9', '#0284C7']}
+                style={styles.actionGradient}
+              >
+                <Ionicons name="camera-outline" size={24} color="#FFFFFF" />
+                <Text style={styles.actionText}>Scan Receipt</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionButton}>
+              <LinearGradient
+                colors={['#8B5CF6', '#7C3AED']}
+                style={styles.actionGradient}
+              >
+                <Ionicons name="analytics-outline" size={24} color="#FFFFFF" />
+                <Text style={styles.actionText}>View Reports</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionButton}>
+              <LinearGradient
+                colors={['#F59E0B', '#D97706']}
+                style={styles.actionGradient}
+              >
+                <Ionicons name="school-outline" size={24} color="#FFFFFF" />
+                <Text style={styles.actionText}>Learn</Text>
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Recent Transactions */}
-        <View style={styles.section}>
+        {/* Recent Activity */}
+        <View style={styles.recentContainer}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Transactions</Text>
+            <Text style={styles.sectionTitle}>Recent Activity</Text>
             <TouchableOpacity>
               <Text style={styles.seeAllText}>See All</Text>
             </TouchableOpacity>
           </View>
-          {recentTransactions.map((transaction) => (
-            <View key={transaction.id} style={styles.transactionItem}>
-              <View style={styles.transactionInfo}>
-                <Text style={styles.transactionMerchant}>{transaction.merchant}</Text>
-                <Text style={styles.transactionCategory}>{transaction.category}</Text>
+          {monthlyExpenses.slice(0, 3).map((expense) => (
+            <View key={expense.id} style={styles.activityItem}>
+              <View style={styles.activityIcon}>
+                <Ionicons name="receipt-outline" size={20} color="#64748B" />
               </View>
-              <View style={styles.transactionAmountContainer}>
-                <Text
-                  style={[
-                    styles.transactionAmount,
-                    {
-                      color: transaction.type === 'credit' ? '#10B981' : '#1E3A8A',
-                    },
-                  ]}
-                >
-                  {transaction.type === 'credit' ? '+' : ''}
-                  {formatCurrency(transaction.amount)}
+              <View style={styles.activityContent}>
+                <Text style={styles.activityTitle}>{expense.merchant}</Text>
+                <Text style={styles.activitySubtitle}>{expense.category}</Text>
+              </View>
+              <View style={styles.activityAmount}>
+                <Text style={styles.activityAmountText}>
+                  -{formatCurrency(expense.amount)}
                 </Text>
-                <Text style={styles.transactionDate}>{transaction.date}</Text>
+                <Text style={styles.activityDate}>{expense.date}</Text>
               </View>
             </View>
           ))}
@@ -265,87 +353,167 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   header: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 30,
+  },
+  headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
+    marginBottom: 20,
   },
   greeting: {
     fontSize: 16,
-    color: '#64748B',
-    fontWeight: '400',
+    color: '#E2E8F0',
+    marginBottom: 4,
   },
   userName: {
     fontSize: 24,
-    color: '#1E3A8A',
-    fontWeight: '700',
-    marginTop: 4,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
   },
   notificationButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
   },
   balanceCard: {
-    marginHorizontal: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 16,
-    padding: 24,
-    marginBottom: 24,
-  },
-  balanceHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    padding: 20,
     alignItems: 'center',
-    marginBottom: 8,
   },
   balanceLabel: {
     fontSize: 16,
-    color: '#FFFFFF',
-    opacity: 0.9,
-  },
-  eyeButton: {
-    padding: 4,
+    color: '#E2E8F0',
+    marginBottom: 8,
   },
   balanceAmount: {
     fontSize: 32,
+    fontWeight: 'bold',
     color: '#FFFFFF',
-    fontWeight: '700',
-    marginBottom: 12,
+    marginBottom: 8,
   },
-  balanceFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  balanceItem: {
+  balanceChange: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  balanceSubtext: {
+  balanceChangeText: {
     fontSize: 14,
-    color: '#FFFFFF',
-    marginLeft: 6,
-    opacity: 0.9,
+    color: '#10B981',
+    marginLeft: 4,
   },
-  section: {
+  gamificationContainer: {
     paddingHorizontal: 20,
-    marginBottom: 24,
+  },
+  quickStatsContainer: {
+    padding: 20,
   },
   sectionTitle: {
     fontSize: 20,
-    color: '#1E3A8A',
     fontWeight: '600',
+    color: '#1E293B',
     marginBottom: 16,
+  },
+  quickStatsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  quickStatCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    width: (width - 60) / 2,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  quickStatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  quickStatLabel: {
+    fontSize: 14,
+    color: '#64748B',
+    marginLeft: 8,
+  },
+  quickStatValue: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 4,
+  },
+  quickStatChange: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  insightsContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  insightCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderLeftWidth: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  insightHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  insightTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 12,
+  },
+  insightMessage: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  actionsContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  actionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  actionButton: {
+    width: (width - 60) / 2,
+    marginBottom: 12,
+  },
+  actionGradient: {
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 80,
+  },
+  actionText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  recentContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 20,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -355,124 +523,15 @@ const styles = StyleSheet.create({
   },
   seeAllText: {
     fontSize: 14,
-    color: '#0EA5E9',
+    color: '#3B82F6',
     fontWeight: '500',
   },
-  quickActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  actionButton: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    marginHorizontal: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  actionText: {
-    fontSize: 12,
-    color: '#1E3A8A',
-    fontWeight: '500',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  insightCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  insightIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F8FAFC',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  insightContent: {
-    flex: 1,
-  },
-  insightTitle: {
-    fontSize: 16,
-    color: '#1E3A8A',
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  insightMessage: {
-    fontSize: 14,
-    color: '#64748B',
-    lineHeight: 20,
-  },
-  goalCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  goalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  goalTitle: {
-    fontSize: 18,
-    color: '#1E3A8A',
-    fontWeight: '600',
-  },
-  goalAmount: {
-    fontSize: 16,
-    color: '#64748B',
-    fontWeight: '500',
-  },
-  progressContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  progressBar: {
-    flex: 1,
-    height: 8,
-    backgroundColor: '#E2E8F0',
-    borderRadius: 4,
-    marginRight: 12,
-  },
-  progressFill: {
-    height: 8,
-    backgroundColor: '#10B981',
-    borderRadius: 4,
-  },
-  progressText: {
-    fontSize: 16,
-    color: '#1E3A8A',
-    fontWeight: '600',
-  },
-  transactionItem: {
+  activityItem: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
     marginBottom: 8,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -480,28 +539,38 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 1,
   },
-  transactionInfo: {
+  activityIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  activityContent: {
     flex: 1,
   },
-  transactionMerchant: {
+  activityTitle: {
     fontSize: 16,
-    color: '#1E3A8A',
     fontWeight: '500',
-    marginBottom: 4,
+    color: '#1E293B',
+    marginBottom: 2,
   },
-  transactionCategory: {
+  activitySubtitle: {
     fontSize: 14,
     color: '#64748B',
   },
-  transactionAmountContainer: {
+  activityAmount: {
     alignItems: 'flex-end',
   },
-  transactionAmount: {
+  activityAmountText: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 4,
+    color: '#EF4444',
+    marginBottom: 2,
   },
-  transactionDate: {
+  activityDate: {
     fontSize: 12,
     color: '#64748B',
   },

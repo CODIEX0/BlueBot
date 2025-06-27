@@ -8,8 +8,14 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, FileText, Scale, AlertTriangle, Clock, DollarSign } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+
+// Icon wrapper component
+const Icon = ({ name, size, color }: { name: string; size: number; color: string }) => {
+  const IconLib = Ionicons as any;
+  return <IconLib name={name} size={size} color={color} />;
+};
 
 export default function TermsConditionsScreen() {
   const router = useRouter();
@@ -22,7 +28,7 @@ export default function TermsConditionsScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <ArrowLeft size={24} color="#1E3A8A" />
+          <Icon name="arrow-back" size={24} color="#1E3A8A" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Terms & Conditions</Text>
         <View style={{ width: 40 }} />
@@ -31,26 +37,29 @@ export default function TermsConditionsScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Hero Section */}
         <LinearGradient
-          colors={['#1E3A8A', '#3B82F6']}
+          colors={['#1E3A8A', '#0EA5E9']}
           style={styles.heroSection}
         >
-          <Scale size={48} color="#FFFFFF" />
-          <Text style={styles.heroTitle}>Terms of Service</Text>
+          <Icon name="shield-checkmark" size={48} color="#FFFFFF" />
+          <Text style={styles.heroTitle}>Your Financial Privacy Matters</Text>
           <Text style={styles.heroSubtitle}>
-            Your agreement with BlueBot Financial Services
+            BlueBot is committed to protecting your financial data and privacy
+            in compliance with POPIA and South African banking regulations.
           </Text>
         </LinearGradient>
 
         {/* Last Updated */}
-        <View style={styles.updateNotice}>
-          <Clock size={16} color="#059669" />
-          <Text style={styles.updateText}>Last updated: June 26, 2025</Text>
+        <View style={styles.lastUpdated}>
+          <Icon name="alert-circle" size={16} color="#0EA5E9" />
+          <Text style={styles.lastUpdatedText}>
+            Last updated: June 26, 2025
+          </Text>
         </View>
 
         {/* Terms Sections */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <FileText size={20} color="#1E3A8A" />
+            <Icon name="document-text" size={20} color="#1E3A8A" />
             <Text style={styles.sectionTitle}>1. Acceptance of Terms</Text>
           </View>
           <Text style={styles.sectionText}>
@@ -63,7 +72,7 @@ export default function TermsConditionsScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <FileText size={20} color="#1E3A8A" />
+            <Icon name="document-text" size={20} color="#1E3A8A" />
             <Text style={styles.sectionTitle}>2. Service Description</Text>
           </View>
           <Text style={styles.sectionText}>
@@ -93,7 +102,7 @@ export default function TermsConditionsScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <FileText size={20} color="#1E3A8A" />
+            <Icon name="document-text" size={20} color="#1E3A8A" />
             <Text style={styles.sectionTitle}>3. User Responsibilities</Text>
           </View>
           <Text style={styles.sectionText}>You agree to:</Text>
@@ -118,7 +127,7 @@ export default function TermsConditionsScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <FileText size={20} color="#1E3A8A" />
+            <Icon name="document-text" size={20} color="#1E3A8A" />
             <Text style={styles.sectionTitle}>4. POPIA Compliance</Text>
           </View>
           <Text style={styles.sectionText}>
@@ -143,7 +152,7 @@ export default function TermsConditionsScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <FileText size={20} color="#1E3A8A" />
+            <Icon name="document-text" size={20} color="#1E3A8A" />
             <Text style={styles.sectionTitle}>5. Financial Services</Text>
           </View>
           <Text style={styles.sectionText}>
@@ -165,7 +174,7 @@ export default function TermsConditionsScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <FileText size={20} color="#1E3A8A" />
+            <Icon name="document-text" size={20} color="#1E3A8A" />
             <Text style={styles.sectionTitle}>6. Security & Risk</Text>
           </View>
           <Text style={styles.sectionText}>
@@ -190,7 +199,7 @@ export default function TermsConditionsScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <FileText size={20} color="#1E3A8A" />
+            <Icon name="document-text" size={20} color="#1E3A8A" />
             <Text style={styles.sectionTitle}>7. Limitation of Liability</Text>
           </View>
           <Text style={styles.sectionText}>
@@ -203,7 +212,7 @@ export default function TermsConditionsScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <FileText size={20} color="#1E3A8A" />
+            <Icon name="document-text" size={20} color="#1E3A8A" />
             <Text style={styles.sectionTitle}>8. Termination</Text>
           </View>
           <Text style={styles.sectionText}>
@@ -216,7 +225,7 @@ export default function TermsConditionsScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <FileText size={20} color="#1E3A8A" />
+            <Icon name="document-text" size={20} color="#1E3A8A" />
             <Text style={styles.sectionTitle}>9. Governing Law</Text>
           </View>
           <Text style={styles.sectionText}>
@@ -228,7 +237,7 @@ export default function TermsConditionsScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <FileText size={20} color="#1E3A8A" />
+            <Icon name="document-text" size={20} color="#1E3A8A" />
             <Text style={styles.sectionTitle}>10. Contact Information</Text>
           </View>
           <Text style={styles.sectionText}>
@@ -322,23 +331,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginLeft: 8,
   },
-  updateNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F0FDF4',
-    marginHorizontal: 20,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#10B981',
-  },
-  updateText: {
-    fontSize: 14,
-    color: '#047857',
-    marginLeft: 8,
-    fontWeight: '500',
-  },
   section: {
     paddingHorizontal: 20,
     marginBottom: 24,
@@ -400,3 +392,4 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
 });
+

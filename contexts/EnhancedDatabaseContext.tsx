@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React from 'react';
+const { useState, useCallback, useEffect, useRef, useContext, createContext } = React;
 import * as SQLite from 'expo-sqlite';
 import { 
   collection, 
@@ -112,7 +113,7 @@ export function useDatabase() {
 }
 
 interface DatabaseProviderProps {
-  children: ReactNode;
+  children: React.ReactNode;
 }
 
 export function DatabaseProvider({ children }: DatabaseProviderProps) {
@@ -718,7 +719,7 @@ export function DatabaseProvider({ children }: DatabaseProviderProps) {
   };
 
   const getCategories = (): string[] => {
-    const categories = [...new Set(expenses.map(expense => expense.category))];
+    const categories = [...new Set(expenses.map((expense: any) => expense.category as string).filter(Boolean))] as string[];
     return categories.sort();
   };
 
@@ -813,3 +814,5 @@ export function DatabaseProvider({ children }: DatabaseProviderProps) {
     </DatabaseContext.Provider>
   );
 }
+
+

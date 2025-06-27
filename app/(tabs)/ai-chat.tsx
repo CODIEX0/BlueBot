@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React from 'react';
+const { useState, useCallback, useEffect, useRef } = React;
 import {
   View,
   Text,
@@ -9,94 +10,213 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
-import {
-  Send,
-  Bot,
-  User,
-  TrendingUp,
-  AlertCircle,
-  Lightbulb,
-  DollarSign,
-} from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
+import MultiAI from '../../services/MultiAI';
+import { useMobileDatabase } from '../../contexts/MobileDatabaseContext';
+import { useMobileAuth } from '../../contexts/MobileAuthContext';
+
+// Icon wrapper component to handle icon rendering
+const Icon = ({ name, size, color }: { name: string; size: number; color: string }) => {
+  const IconLib = Ionicons as any;
+  return <IconLib name={name} size={size} color={color} />;
+};
 
 interface Message {
   id: string;
   text: string;
   user: boolean;
   timestamp: Date;
-  type?: 'tip' | 'warning' | 'insight';
+  type?: 'tip' | 'warning' | 'insight' | 'action' | 'suggestion';
+  actions?: MessageAction[];
+}
+
+interface MessageAction {
+  id: string;
+  label: string;
+  action: () => void;
 }
 
 interface QuickAction {
   id: string;
   text: string;
-  icon: React.ReactNode;
+  icon: JSX.Element;
+  category: 'analysis' | 'advice' | 'education' | 'goal' | 'receipt';
 }
 
 export default function AIChat() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      text: "Hi! I'm BlueBot, your AI financial assistant. I'm here to help you manage your money better, understand your spending patterns, and achieve your financial goals. How can I help you today?",
-      user: false,
-      timestamp: new Date(),
-      type: 'insight',
-    },
-  ]);
+  const { user } = useMobileAuth();
+  const { expenses, getExpensesByDateRange } = useMobileDatabase();
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [chatContext, setChatContext] = useState<any>({});
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  // Handle suggestion clicks
+  const handleSuggestionClick = (suggestion: string) => {
+    setInputText(suggestion);
+  };
+
+  // Handle action requirements from AI
+  const handleActionRequired = (actionRequired: any) => {
+    switch (actionRequired.type) {
+      case 'create_budget':
+        Alert.alert('Budget Helper', 'Let me help you create a budget! Go to the Expenses tab to set up your budget categories.');
+        break;
+      case 'set_goal':
+        Alert.alert('Goal Setting', 'Ready to set a financial goal? Check out the Goals section in your profile.');
+        break;
+      case 'track_expense':
+        Alert.alert('Expense Tracking', 'Start tracking your expenses in the Expenses tab for better financial insights.');
+        break;
+      case 'educate':
+      case 'learn_more':
+        Alert.alert('Financial Education', 'Check out our education modules to learn more about this topic!');
+        break;
+      default:
+        break;
+    }
+  };
+
+  // Send message to AI using MultiAI service
+  const sendMessageToAI = async (message: string) => {
+    try {
+      setIsLoading(true);
+      
+      // Get user context for better AI responses
+      const context = {
+        userBalance: 15000, // This would come from real data
+        recentExpenses: chatContext.recentExpenses?.slice(0, 5) || [],
+        financialGoals: [
+          { title: 'Emergency Fund', targetAmount: 10000, currentAmount: 3500 },
+        ]
+      };
+
+      const response = await MultiAI.sendMessage(message, messages.map(m => ({
+        id: m.id,
+        role: m.user ? 'user' : 'assistant',
+        content: m.text,
+        timestamp: m.timestamp,
+        context: m.user ? undefined : context
+      })), context);
+
+      // Add AI response to messages
+      const aiMessage: Message = {
+        id: Date.now().toString() + '_ai',
+        text: response.message,
+        user: false,
+        timestamp: new Date(),
+        type: response.actionRequired ? 'action' : 'insight',
+        actions: response.suggestions ? response.suggestions.map((suggestion, index) => ({
+          id: `suggestion_${index}`,
+          label: suggestion,
+          action: () => handleSuggestionClick(suggestion)
+        })) : undefined
+      };
+
+      setMessages(prev => [...prev, aiMessage]);
+      
+      // Handle action requirements
+      if (response.actionRequired) {
+        handleActionRequired(response.actionRequired);
+      }
+
+    } catch (error) {
+      console.error('AI Error:', error);
+      const errorMessage: Message = {
+        id: Date.now().toString() + '_error',
+        text: 'Sorry, I encountered an issue. Please try again.',
+        user: false,
+        timestamp: new Date(),
+        type: 'warning'
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Initialize chat with welcome message
+  useEffect(() => {
+    if (messages.length === 0) {
+      const welcomeMessage: Message = {
+        id: '1',
+        text: `Hi! I'm BlueBot, your AI financial assistant. I'm here to help you manage your money better, understand your spending patterns, and achieve your financial goals. How can I help you today?`,
+        user: false,
+        timestamp: new Date(),
+        type: 'insight',
+      };
+      setMessages([welcomeMessage]);
+      loadChatContext();
+    }
+  }, [user]);
+
+  const loadChatContext = async () => {
+    try {
+      // Load recent expenses and financial data for context
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+      
+      const recentExpenses = await getExpensesByDateRange(
+        startDate.toISOString().split('T')[0], 
+        endDate.toISOString().split('T')[0]
+      );
+      
+      setChatContext({
+        recentExpenses,
+        totalSpent: recentExpenses.reduce((sum, exp) => sum + exp.amount, 0),
+        expenseCount: recentExpenses.length,
+        lastUpdated: new Date(),
+      });
+    } catch (error) {
+      console.warn('Failed to load chat context:', error);
+    }
+  };
 
   const quickActions: QuickAction[] = [
     {
       id: '1',
       text: 'Analyze my spending',
-      icon: <TrendingUp size={16} color="#1E3A8A" />,
+      icon: <Icon name="trending-up" size={16} color="#1E3A8A" />,
+      category: 'analysis',
     },
     {
       id: '2',
       text: 'Budget advice',
-      icon: <DollarSign size={16} color="#1E3A8A" />,
+      icon: <Icon name="cash" size={16} color="#1E3A8A" />,
+      category: 'advice',
     },
     {
       id: '3',
       text: 'Savings tips',
-      icon: <Lightbulb size={16} color="#1E3A8A" />,
+      icon: <Icon name="bulb" size={16} color="#1E3A8A" />,
+      category: 'advice',
     },
     {
       id: '4',
       text: 'Explain banking terms',
-      icon: <AlertCircle size={16} color="#1E3A8A" />,
+      icon: <Icon name="alert-circle" size={16} color="#1E3A8A" />,
+      category: 'education',
+    },
+    {
+      id: '5',
+      text: 'Scan receipt',
+      icon: <Icon name="camera" size={16} color="#1E3A8A" />,
+      category: 'receipt',
+    },
+    {
+      id: '6',
+      text: 'Set savings goal',
+      icon: <Icon name="flag" size={16} color="#1E3A8A" />,
+      category: 'goal',
     },
   ];
 
-  const simulateAIResponse = (userMessage: string): string => {
-    const lowerMessage = userMessage.toLowerCase();
-    
-    if (lowerMessage.includes('spending') || lowerMessage.includes('analyze')) {
-      return "I've analyzed your spending patterns over the last 30 days. You've spent R4,567 this month, with 35% going to groceries, 20% to transport, and 15% to entertainment. Your grocery spending is 12% higher than last month. Consider setting a weekly grocery budget to help control costs.";
-    }
-    
-    if (lowerMessage.includes('budget') || lowerMessage.includes('advice')) {
-      return "Based on your income of R15,000, I recommend the 50/30/20 rule: 50% (R7,500) for needs like rent and groceries, 30% (R4,500) for wants like entertainment, and 20% (R3,000) for savings and debt repayment. You're currently spending R5,200 on needs and R3,400 on wants, leaving R6,400 unallocated. Great opportunity to boost your savings!";
-    }
-    
-    if (lowerMessage.includes('save') || lowerMessage.includes('savings')) {
-      return "Here are 3 personalized savings tips: 1) Switch to generic brands for groceries - could save R200/month. 2) Use public transport twice a week instead of Uber - save R300/month. 3) Cook at home 2 more times per week - save R400/month. These small changes could help you save R900 monthly toward your emergency fund goal!";
-    }
-    
-    if (lowerMessage.includes('goal') || lowerMessage.includes('emergency')) {
-      return "Your emergency fund goal of R10,000 is excellent! You're currently 72.5% there with R7,250 saved. At your current saving rate, you'll reach your goal in 3 months. To accelerate this, consider automatically transferring R500 after each payday to your savings account.";
-    }
-    
-    if (lowerMessage.includes('debt') || lowerMessage.includes('credit')) {
-      return "Managing debt wisely is crucial for financial health. Pay off high-interest debt first (like credit cards), make minimum payments on all debts, and avoid taking on new debt. If you have multiple debts, consider the debt snowball method - pay minimums on all debts, then put extra money toward the smallest debt first.";
-    }
-    
-    return "I understand you're asking about your finances. Could you be more specific? I can help with budgeting, spending analysis, savings goals, debt management, or explain banking concepts. What would you like to focus on?";
-  };
-
-  const sendMessage = useCallback(() => {
+  const sendMessage = useCallback(async () => {
     if (inputText.trim() === '') return;
 
     const userMessage: Message = {
@@ -107,23 +227,91 @@ export default function AIChat() {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const currentInput = inputText.trim();
     setInputText('');
     setIsTyping(true);
 
-    // Simulate AI response delay
+    // Scroll to bottom
     setTimeout(() => {
-      const aiResponse: Message = {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+
+    try {
+      // Use MultiAI service
+      await sendMessageToAI(currentInput);
+      
+    } catch (error) {
+      console.error('AI chat error:', error);
+      
+      // Fallback to local responses
+      const fallbackResponse = getLocalResponse(currentInput);
+      const aiMessage: Message = {
         id: Date.now().toString() + '-ai',
-        text: simulateAIResponse(inputText.trim()),
+        text: fallbackResponse,
         user: false,
         timestamp: new Date(),
         type: 'insight',
       };
       
-      setMessages(prev => [...prev, aiResponse]);
+      setMessages(prev => [...prev, aiMessage]);
+    } finally {
       setIsTyping(false);
-    }, 1500);
-  }, [inputText]);
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [inputText, chatContext, messages, user]);
+
+  const handleMessageAction = (action: any) => {
+    switch (action.type) {
+      case 'navigate':
+        // Navigate to specific screen
+        Alert.alert('Navigation', `Would navigate to ${action.target}`);
+        break;
+      case 'create_goal':
+        // Create a new savings goal
+        Alert.alert('Create Goal', 'Goal creation feature coming soon!');
+        break;
+      case 'scan_receipt':
+        // Open receipt scanner
+        Alert.alert('Scan Receipt', 'Receipt scanning feature coming soon!');
+        break;
+      case 'view_expenses':
+        // Show expense breakdown
+        Alert.alert('View Expenses', 'Expense details feature coming soon!');
+        break;
+      default:
+        console.log('Unknown action:', action);
+    }
+  };
+
+  const getLocalResponse = (message: string): string => {
+    const lowerMessage = message.toLowerCase();
+    
+    if (lowerMessage.includes('spending') || lowerMessage.includes('analyze')) {
+      const totalSpent = chatContext.totalSpent || 0;
+      const expenseCount = chatContext.expenseCount || 0;
+      return `I've analyzed your recent spending. You've spent R${totalSpent.toFixed(2)} across ${expenseCount} transactions this month. Would you like me to break this down by category or suggest ways to optimize your spending?`;
+    }
+    
+    if (lowerMessage.includes('budget') || lowerMessage.includes('advice')) {
+      return "Based on South African financial best practices, I recommend the 50/30/20 rule: 50% for needs (rent, groceries, transport), 30% for wants (entertainment, dining out), and 20% for savings and debt repayment. Would you like me to help you create a personalized budget?";
+    }
+    
+    if (lowerMessage.includes('save') || lowerMessage.includes('savings')) {
+      return "Here are some South African savings tips tailored for you: 1) Consider a tax-free savings account (TFSA) - save up to R36,000/year tax-free. 2) Look into unit trusts for long-term growth. 3) Use the envelope method for monthly budgeting. Would you like specific advice for any of these?";
+    }
+    
+    if (lowerMessage.includes('goal')) {
+      return "Setting financial goals is crucial! Popular goals include emergency funds (3-6 months expenses), home deposits (typically 10% of property value), and retirement savings. What financial goal would you like to work towards?";
+    }
+    
+    if (lowerMessage.includes('receipt') || lowerMessage.includes('scan')) {
+      return "I can help you track expenses by scanning receipts! Just tap the 'Scan receipt' button or use the camera feature. I'll automatically categorize your purchases and add them to your expense tracking.";
+    }
+    
+    return "I'm here to help with your financial questions! I can analyze spending, provide budget advice, help set savings goals, scan receipts, or explain financial concepts. What would you like to focus on today?";
+  };
 
   const sendQuickAction = useCallback((actionText: string) => {
     setInputText(actionText);
@@ -140,13 +328,13 @@ export default function AIChat() {
   const getMessageIcon = (type?: string) => {
     switch (type) {
       case 'tip':
-        return <Lightbulb size={16} color="#10B981" />;
+        return <Icon name="bulb" size={16} color="#10B981" />;
       case 'warning':
-        return <AlertCircle size={16} color="#F59E0B" />;
+        return <Icon name="alert-circle" size={16} color="#F59E0B" />;
       case 'insight':
-        return <TrendingUp size={16} color="#0EA5E9" />;
+        return <Icon name="trending-up" size={16} color="#0EA5E9" />;
       default:
-        return <Bot size={16} color="#1E3A8A" />;
+        return <Icon name="chatbubble-ellipses" size={16} color="#1E3A8A" />;
     }
   };
 
@@ -160,7 +348,7 @@ export default function AIChat() {
         <View style={styles.header}>
           <View style={styles.headerContent}>
             <View style={styles.botAvatar}>
-              <Bot size={24} color="#FFFFFF" />
+              <Icon name="chatbubble-ellipses" size={24} color="#FFFFFF" />
             </View>
             <View style={styles.headerText}>
               <Text style={styles.headerTitle}>BlueBot</Text>
@@ -191,51 +379,68 @@ export default function AIChat() {
 
         {/* Messages */}
         <ScrollView 
+          ref={scrollViewRef}
           style={styles.messagesContainer}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.messagesList}
         >
           {messages.map((message) => (
-            <View
-              key={message.id}
-              style={[
-                styles.messageContainer,
-                message.user ? styles.userMessageContainer : styles.aiMessageContainer,
-              ]}
-            >
-              {!message.user && (
-                <View style={styles.aiMessageHeader}>
-                  <View style={styles.aiAvatar}>
-                    {getMessageIcon(message.type)}
-                  </View>
-                </View>
-              )}
+            <View key={message.id}>
               <View
                 style={[
-                  styles.messageBubble,
-                  message.user ? styles.userMessageBubble : styles.aiMessageBubble,
+                  styles.messageContainer,
+                  message.user ? styles.userMessageContainer : styles.aiMessageContainer,
                 ]}
               >
-                <Text
+                {!message.user && (
+                  <View style={styles.aiMessageHeader}>
+                    <View style={styles.aiAvatar}>
+                      {getMessageIcon(message.type)}
+                    </View>
+                  </View>
+                )}
+                <View
                   style={[
-                    styles.messageText,
-                    message.user ? styles.userMessageText : styles.aiMessageText,
+                    styles.messageBubble,
+                    message.user ? styles.userMessageBubble : styles.aiMessageBubble,
                   ]}
                 >
-                  {message.text}
-                </Text>
-                <Text
-                  style={[
-                    styles.messageTime,
-                    message.user ? styles.userMessageTime : styles.aiMessageTime,
-                  ]}
-                >
-                  {formatTime(message.timestamp)}
-                </Text>
+                  <Text
+                    style={[
+                      styles.messageText,
+                      message.user ? styles.userMessageText : styles.aiMessageText,
+                    ]}
+                  >
+                    {message.text}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.messageTime,
+                      message.user ? styles.userMessageTime : styles.aiMessageTime,
+                    ]}
+                  >
+                    {formatTime(message.timestamp)}
+                  </Text>
+                </View>
+                {message.user && (
+                  <View style={styles.userAvatar}>
+                    <Icon name="person" size={16} color="#1E3A8A" />
+                  </View>
+                )}
               </View>
-              {message.user && (
-                <View style={styles.userAvatar}>
-                  <User size={16} color="#1E3A8A" />
+              
+              {/* Message Actions */}
+              {message.actions && message.actions.length > 0 && (
+                <View style={styles.messageActionsContainer}>
+                  {message.actions.map((action) => (
+                    <TouchableOpacity
+                      key={action.id}
+                      style={styles.messageActionButton}
+                      onPress={action.action}
+                    >
+                      <Text style={styles.messageActionText}>{action.label}</Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
               )}
             </View>
@@ -243,10 +448,10 @@ export default function AIChat() {
           {isTyping && (
             <View style={styles.typingContainer}>
               <View style={styles.aiAvatar}>
-                <Bot size={16} color="#1E3A8A" />
+                <Icon name="chatbubble-ellipses" size={16} color="#1E3A8A" />
               </View>
               <View style={styles.typingBubble}>
-                <Text style={styles.typingText}>BlueBot is typing...</Text>
+                <Text style={styles.typingText}>BlueBot is thinking...</Text>
               </View>
             </View>
           )}
@@ -273,7 +478,7 @@ export default function AIChat() {
             onPress={sendMessage}
             disabled={!inputText.trim()}
           >
-            <Send size={20} color={inputText.trim() ? "#FFFFFF" : "#64748B"} />
+            <Icon name="send" size={20} color={inputText.trim() ? "#FFFFFF" : "#64748B"} />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -471,5 +676,25 @@ const styles = StyleSheet.create({
   },
   sendButtonInactive: {
     backgroundColor: '#E2E8F0',
+  },
+  messageActionsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  messageActionButton: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  messageActionText: {
+    fontSize: 13,
+    color: '#1E3A8A',
+    fontWeight: '500',
   },
 });

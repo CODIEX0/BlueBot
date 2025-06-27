@@ -8,8 +8,14 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Shield, Lock, Eye, Database, AlertTriangle } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+
+// Icon wrapper component
+const Icon = ({ name, size, color }: { name: string; size: number; color: string }) => {
+  const IconLib = Ionicons as any;
+  return <IconLib name={name} size={size} color={color} />;
+};
 
 export default function PrivacyPolicyScreen() {
   const router = useRouter();
@@ -22,7 +28,7 @@ export default function PrivacyPolicyScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <ArrowLeft size={24} color="#1E3A8A" />
+          <Icon name="arrow-back" size={24} color="#1E3A8A" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Privacy Policy</Text>
         <View style={{ width: 40 }} />
@@ -34,7 +40,7 @@ export default function PrivacyPolicyScreen() {
           colors={['#10B981', '#059669']}
           style={styles.heroSection}
         >
-          <Shield size={48} color="#FFFFFF" />
+          <Icon name="shield-checkmark" size={48} color="#FFFFFF" />
           <Text style={styles.heroTitle}>Your Privacy is Protected</Text>
           <Text style={styles.heroSubtitle}>
             POPIA-compliant data protection for all South African users
@@ -43,7 +49,7 @@ export default function PrivacyPolicyScreen() {
 
         {/* POPIA Notice */}
         <View style={styles.popiaNotice}>
-          <AlertTriangle size={20} color="#F59E0B" />
+          <Icon name="warning" size={20} color="#F59E0B" />
           <View style={styles.popiaText}>
             <Text style={styles.popiaTitle}>POPIA Compliance Notice</Text>
             <Text style={styles.popiaSubtitle}>
@@ -56,7 +62,7 @@ export default function PrivacyPolicyScreen() {
         {/* Data Collection */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Database size={20} color="#1E3A8A" />
+            <Icon name="server" size={20} color="#1E3A8A" />
             <Text style={styles.sectionTitle}>Information We Collect</Text>
           </View>
           <Text style={styles.sectionText}>
@@ -97,7 +103,7 @@ export default function PrivacyPolicyScreen() {
         {/* How We Use Data */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Eye size={20} color="#1E3A8A" />
+            <Icon name="eye" size={20} color="#1E3A8A" />
             <Text style={styles.sectionTitle}>How We Use Your Information</Text>
           </View>
           <Text style={styles.sectionText}>
@@ -128,7 +134,7 @@ export default function PrivacyPolicyScreen() {
         {/* Data Security */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Lock size={20} color="#1E3A8A" />
+            <Icon name="lock-closed" size={20} color="#1E3A8A" />
             <Text style={styles.sectionTitle}>Data Security</Text>
           </View>
           <Text style={styles.sectionText}>
@@ -165,7 +171,7 @@ export default function PrivacyPolicyScreen() {
         {/* Your Rights */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Shield size={20} color="#1E3A8A" />
+            <Icon name="shield-checkmark" size={20} color="#1E3A8A" />
             <Text style={styles.sectionTitle}>Your POPIA Rights</Text>
           </View>
           <Text style={styles.sectionText}>
@@ -214,7 +220,7 @@ export default function PrivacyPolicyScreen() {
         {/* Third Parties */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Database size={20} color="#1E3A8A" />
+            <Icon name="server" size={20} color="#1E3A8A" />
             <Text style={styles.sectionTitle}>Third-Party Partners</Text>
           </View>
           <Text style={styles.sectionText}>
@@ -243,7 +249,7 @@ export default function PrivacyPolicyScreen() {
         {/* Contact Information */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <AlertTriangle size={20} color="#1E3A8A" />
+            <Icon name="warning" size={20} color="#1E3A8A" />
             <Text style={styles.sectionTitle}>Contact Our Privacy Officer</Text>
           </View>
           <View style={styles.contactCard}>
@@ -534,3 +540,4 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
+
