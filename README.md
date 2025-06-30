@@ -1,4 +1,4 @@
-# BlueBot - Inteligent Financial Assistant
+# BlueBot - Intelligent Financial Assistant
 
 BlueBot is a comprehensive React Native financial assistant app with **mobile-first, offline-first architecture** designed specifically for both banked and unbanked users in South Africa. The app features SQLite-based local storage, biometric authentication, and cloud synchronization when online.
 
