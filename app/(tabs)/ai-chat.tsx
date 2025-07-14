@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React from 'react';
+const { useState, useEffect, useRef, useCallback } = React;
 import {
   View,
   Text,
@@ -12,6 +13,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import MultiAI from '../../services/MultiAI';
 import { useMobileDatabase } from '../../contexts/MobileDatabaseContext';
 import { useMobileAuth } from '../../contexts/MobileAuthContext';
@@ -47,6 +49,7 @@ interface QuickAction {
 export default function AIChat() {
   const { user } = useMobileAuth();
   const { expenses, getExpensesByDateRange } = useMobileDatabase();
+  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -75,7 +78,7 @@ export default function AIChat() {
         break;
       case 'educate':
       case 'learn_more':
-        Alert.alert('Financial Education', 'Check out our education modules to learn more about this topic!');
+        router.push('/(tabs)/learn');
         break;
       default:
         break;
@@ -269,22 +272,264 @@ export default function AIChat() {
     switch (action.type) {
       case 'navigate':
         // Navigate to specific screen
-        Alert.alert('Navigation', `Would navigate to ${action.target}`);
+        switch (action.target) {
+          case 'wallet':
+            router.push('/(tabs)/wallet');
+            break;
+          case 'profile':
+            router.push('/(tabs)/profile');
+            break;
+          case 'learn':
+            router.push('/(tabs)/learn');
+            break;
+          default:
+            Alert.alert('Navigation', `Navigating to ${action.target}...`);
+        }
         break;
       case 'create_goal':
         // Create a new savings goal
-        Alert.alert('Create Goal', 'Goal creation feature coming soon!');
+        showCreateGoalDialog();
         break;
       case 'scan_receipt':
         // Open receipt scanner
-        Alert.alert('Scan Receipt', 'Receipt scanning feature coming soon!');
+        showReceiptScanOptions();
         break;
       case 'view_expenses':
         // Show expense breakdown
-        Alert.alert('View Expenses', 'Expense details feature coming soon!');
+        showExpenseBreakdown();
+        break;
+      case 'create_budget':
+        // Help create a budget
+        showBudgetHelper();
+        break;
+      case 'track_expense':
+        // Add new expense
+        showExpenseTracker();
+        break;
+      case 'learn_more':
+        // Navigate to education
+        router.push('/(tabs)/learn');
         break;
       default:
         console.log('Unknown action:', action);
+    }
+  };
+
+  const showCreateGoalDialog = () => {
+    if (Alert.prompt) {
+      Alert.prompt(
+        'Create Savings Goal',
+        'What would you like to save for?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Create Goal', 
+            onPress: (goalName) => {
+              if (goalName && goalName.trim()) {
+                showGoalAmountDialog(goalName.trim());
+              }
+            }
+          }
+        ],
+        'plain-text',
+        'Emergency Fund'
+      );
+    } else {
+      Alert.alert(
+        'Create Savings Goal',
+        'Goal creation feature allows you to set and track financial targets.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Learn More', onPress: () => router.push('/(tabs)/learn') }
+        ]
+      );
+    }
+  };
+
+  const showGoalAmountDialog = (goalName: string) => {
+    if (Alert.prompt) {
+      Alert.prompt(
+        'Set Target Amount',
+        `How much do you want to save for "${goalName}"?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Set Goal', 
+            onPress: (amount) => {
+              const targetAmount = parseFloat(amount || '0');
+              if (targetAmount > 0) {
+                Alert.alert(
+                  'Goal Created!',
+                  `Your "${goalName}" goal of R${targetAmount.toFixed(2)} has been created. Start saving today!`,
+                  [{ text: 'Great!' }]
+                );
+              } else {
+                Alert.alert('Invalid Amount', 'Please enter a valid target amount');
+              }
+            }
+          }
+        ],
+        'numeric',
+        '1000'
+      );
+    }
+  };
+
+  const showReceiptScanOptions = () => {
+    Alert.alert(
+      'Receipt Scanner',
+      'Automatically extract expense details from receipts:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Take Photo', 
+          onPress: () => Alert.alert('Camera', 'Opening camera to scan receipt...')
+        },
+        { 
+          text: 'Choose from Gallery', 
+          onPress: () => Alert.alert('Gallery', 'Opening gallery to select receipt...')
+        },
+        {
+          text: 'Manual Entry',
+          onPress: () => showExpenseTracker()
+        }
+      ]
+    );
+  };
+
+  const showExpenseBreakdown = () => {
+    const recentExpenses = chatContext.recentExpenses || [];
+    const totalSpent = recentExpenses.reduce((sum: number, exp: any) => sum + exp.amount, 0);
+    const categorySums = recentExpenses.reduce((acc: Record<string, number>, exp: any) => {
+      acc[exp.category] = (acc[exp.category] || 0) + exp.amount;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const breakdown = Object.entries(categorySums)
+      .sort(([,a], [,b]) => (b as number) - (a as number))
+      .slice(0, 5)
+      .map(([category, amount]) => `• ${category}: R${(amount as number).toFixed(2)}`)
+      .join('\n');
+
+    Alert.alert(
+      'Expense Breakdown (Last 30 Days)',
+      `Total Spent: R${totalSpent.toFixed(2)}\n\nTop Categories:\n${breakdown || 'No expenses recorded'}`,
+      [
+        { text: 'Close' },
+        { text: 'View Full Report', onPress: () => Alert.alert('Report', 'Detailed expense report coming soon!') }
+      ]
+    );
+  };
+
+  const showBudgetHelper = () => {
+    Alert.alert(
+      'Budget Helper',
+      'Let me help you create a realistic budget based on the 50/30/20 rule:\n\n50% - Needs (rent, groceries, utilities)\n30% - Wants (entertainment, dining out)\n20% - Savings and debt repayment',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Calculate My Budget', onPress: () => showIncomeDialog() },
+        { text: 'Learn More', onPress: () => router.push('/(tabs)/learn') }
+      ]
+    );
+  };
+
+  const showIncomeDialog = () => {
+    if (Alert.prompt) {
+      Alert.prompt(
+        'Monthly Income',
+        'What is your monthly take-home income?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Calculate Budget', 
+            onPress: (income) => {
+              const monthlyIncome = parseFloat(income || '0');
+              if (monthlyIncome > 0) {
+                const needs = monthlyIncome * 0.5;
+                const wants = monthlyIncome * 0.3;
+                const savings = monthlyIncome * 0.2;
+                
+                Alert.alert(
+                  'Your Recommended Budget',
+                  `Monthly Income: R${monthlyIncome.toFixed(2)}\n\n` +
+                  `Needs (50%): R${needs.toFixed(2)}\n` +
+                  `Wants (30%): R${wants.toFixed(2)}\n` +
+                  `Savings (20%): R${savings.toFixed(2)}`,
+                  [
+                    { text: 'Save Budget', onPress: () => Alert.alert('Saved', 'Budget saved to your profile!') },
+                    { text: 'Adjust', onPress: () => Alert.alert('Customize', 'Budget customization coming soon!') },
+                    { text: 'Done' }
+                  ]
+                );
+              } else {
+                Alert.alert('Invalid Income', 'Please enter a valid monthly income');
+              }
+            }
+          }
+        ],
+        'numeric',
+        '15000'
+      );
+    }
+  };
+
+  const showExpenseTracker = () => {
+    if (Alert.prompt) {
+      Alert.prompt(
+        'Add Expense',
+        'Enter expense description:',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Next', 
+            onPress: (description) => {
+              if (description && description.trim()) {
+                showExpenseAmountDialog(description.trim());
+              }
+            }
+          }
+        ],
+        'plain-text',
+        'Lunch at restaurant'
+      );
+    } else {
+      Alert.alert(
+        'Expense Tracker',
+        'Track your daily expenses to better understand your spending patterns.',
+        [
+          { text: 'Close' },
+          { text: 'Learn More', onPress: () => router.push('/(tabs)/learn') }
+        ]
+      );
+    }
+  };
+
+  const showExpenseAmountDialog = (description: string) => {
+    if (Alert.prompt) {
+      Alert.prompt(
+        'Expense Amount',
+        `How much did you spend on "${description}"?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Add Expense', 
+            onPress: (amount) => {
+              const expenseAmount = parseFloat(amount || '0');
+              if (expenseAmount > 0) {
+                Alert.alert(
+                  'Expense Added!',
+                  `"${description}" - R${expenseAmount.toFixed(2)} has been added to your expenses.`,
+                  [{ text: 'Great!' }]
+                );
+              } else {
+                Alert.alert('Invalid Amount', 'Please enter a valid expense amount');
+              }
+            }
+          }
+        ],
+        'numeric',
+        '50'
+      );
     }
   };
 

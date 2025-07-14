@@ -15,6 +15,7 @@ import {
   Alert,
   Dimensions,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -42,6 +43,7 @@ interface FinancialInsight {
 }
 
 export default function Dashboard() {
+  const router = useRouter();
   const { user } = useMobileAuth();
   const { expenses, getExpensesByDateRange, getCategoryTotals } = useMobileDatabase();
   const [totalBalance, setTotalBalance] = useState(15420.50);
@@ -185,7 +187,10 @@ export default function Dashboard() {
               <Text style={styles.greeting}>Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 17 ? 'Afternoon' : 'Evening'}</Text>
               <Text style={styles.userName}>{user?.name || 'Welcome to BlueBot'}</Text>
             </View>
-            <TouchableOpacity style={styles.notificationButton}>
+            <TouchableOpacity 
+              style={styles.notificationButton}
+              onPress={() => Alert.alert('Notifications', 'No new notifications at this time.')}
+            >
               <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
@@ -274,7 +279,10 @@ export default function Dashboard() {
         <View style={styles.actionsContainer}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.actionGrid}>
-            <TouchableOpacity style={styles.actionButton}>
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={() => router.push('/(tabs)/expenses')}
+            >
               <LinearGradient
                 colors={['#10B981', '#059669']}
                 style={styles.actionGradient}
@@ -284,7 +292,10 @@ export default function Dashboard() {
               </LinearGradient>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionButton}>
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={() => router.push('/(tabs)/expenses')}
+            >
               <LinearGradient
                 colors={['#0EA5E9', '#0284C7']}
                 style={styles.actionGradient}
@@ -294,7 +305,10 @@ export default function Dashboard() {
               </LinearGradient>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionButton}>
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={() => router.push('/(tabs)/expenses')}
+            >
               <LinearGradient
                 colors={['#8B5CF6', '#7C3AED']}
                 style={styles.actionGradient}
@@ -304,7 +318,10 @@ export default function Dashboard() {
               </LinearGradient>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionButton}>
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={() => router.push('/(tabs)/learn')}
+            >
               <LinearGradient
                 colors={['#F59E0B', '#D97706']}
                 style={styles.actionGradient}
@@ -320,7 +337,7 @@ export default function Dashboard() {
         <View style={styles.recentContainer}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Recent Activity</Text>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/expenses')}>
               <Text style={styles.seeAllText}>See All</Text>
             </TouchableOpacity>
           </View>

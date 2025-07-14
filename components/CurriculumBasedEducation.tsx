@@ -19,6 +19,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { curriculumService, CurriculumData, Course, Lesson, LearningPath, UserProgress } from '../services/curriculumService';
+import { useGamification } from '../contexts/GamificationContext';
 
 interface Quiz {
   questions: QuizQuestion[];
@@ -50,7 +51,7 @@ const CATEGORY_COLORS = {
 };
 
 export default function CurriculumBasedEducation() {
-  const [selectedView, setSelectedView] = useState<'courses' | 'paths' | 'achievements'>('courses');
+  const [selectedView, setSelectedView] = useState<'courses' | 'lessons' | 'paths' | 'achievements'>('courses');
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
   const [selectedPath, setSelectedPath] = useState<LearningPath | null>(null);
@@ -65,7 +66,10 @@ export default function CurriculumBasedEducation() {
     totalXP: 0,
     currentLevel: 1,
     achievements: [],
+    lastActive: new Date().toISOString()
   });
+
+  const { addPoints, unlockAchievement, updateStats } = useGamification();
 
   useEffect(() => {
     loadCurriculum();
@@ -102,18 +106,89 @@ export default function CurriculumBasedEducation() {
   };
 
   const completeLesson = async (lessonId: string, xpReward: number) => {
+    if (userProgress.completedLessons.includes(lessonId)) {
+      Alert.alert('Already Completed', 'You have already completed this lesson!');
+      return;
+    }
+
+    const newLevel = calculateLevel(userProgress.totalXP + xpReward);
+    const leveledUp = newLevel > userProgress.currentLevel;
+    
     const newProgress = {
       ...userProgress,
       completedLessons: [...userProgress.completedLessons, lessonId],
       totalXP: userProgress.totalXP + xpReward,
+      currentLevel: newLevel,
       lastActive: new Date().toISOString()
     };
     
     setUserProgress(newProgress);
     await curriculumService.saveUserProgress(newProgress);
     
-    Alert.alert('Lesson Completed!', `You earned ${xpReward} XP! 🎉`);
+    // Update gamification system
+    await addPoints(xpReward);
+    await updateStats({ lessonsCompleted: userProgress.completedLessons.length + 1 });
+    
+    // Check for achievements
+    if (newProgress.completedLessons.length === 1) {
+      await unlockAchievement('first-lesson');
+    }
+    if (newProgress.completedLessons.length === 10) {
+      await unlockAchievement('lesson-enthusiast');
+    }
+    if (newProgress.completedLessons.length === 50) {
+      await unlockAchievement('learning-master');
+    }
+    
+    // Check if course is completed
+    const courseCompleted = checkCourseCompletion(lessonId, newProgress);
+    if (courseCompleted) {
+      await unlockAchievement('course-completed');
+    }
+    
+    let message = `You earned ${xpReward} XP! 🎉`;
+    if (leveledUp) {
+      message += `\n\nLevel Up! 🚀 You're now level ${newLevel}!`;
+    }
+    
+    Alert.alert('Lesson Completed!', message);
     setShowLessonModal(false);
+  };
+
+  const calculateLevel = (totalXP: number): number => {
+    // Level calculation: 100 XP for level 1, then exponential growth
+    if (totalXP < 100) return 1;
+    return Math.floor(Math.log2(totalXP / 50)) + 1;
+  };
+
+  const getXPForNextLevel = (currentLevel: number): number => {
+    return Math.pow(2, currentLevel - 1) * 100;
+  };
+
+  const checkCourseCompletion = (lessonId: string, progress: UserProgress): boolean => {
+    if (!curriculum) return false;
+    
+    const course = curriculum.courses.find(c => 
+      c.lessons.some(l => l.id === lessonId)
+    );
+    
+    if (!course) return false;
+    
+    const allLessonsCompleted = course.lessons.every(lesson => 
+      progress.completedLessons.includes(lesson.id)
+    );
+    
+    if (allLessonsCompleted && !progress.completedCourses.includes(course.id)) {
+      const updatedProgress = {
+        ...progress,
+        completedCourses: [...progress.completedCourses, course.id]
+      };
+      setUserProgress(updatedProgress);
+      curriculumService.saveUserProgress(updatedProgress);
+      return true;
+    }
+    
+    return false;
   };
 
   const calculateProgress = (courseId: string) => {
@@ -145,34 +220,52 @@ export default function CurriculumBasedEducation() {
     );
   }
 
-  const renderHeader = () => (
-    <View style={styles.header}>
-      <LinearGradient
-        colors={['#667eea', '#764ba2']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.headerGradient}
-      >
-        <Text style={styles.headerTitle}>{curriculum.meta.title}</Text>
-        <Text style={styles.headerSubtitle}>{curriculum.meta.description}</Text>
-        
-        <View style={styles.statsContainer}>
-          <View style={styles.statBox}>
-            <Text style={styles.statNumber}>{userProgress.totalXP}</Text>
-            <Text style={styles.statLabel}>Total XP</Text>
+  const renderHeader = () => {
+    const currentLevelXP = getXPForNextLevel(userProgress.currentLevel - 1);
+    const nextLevelXP = getXPForNextLevel(userProgress.currentLevel);
+    const progressToNextLevel = ((userProgress.totalXP - currentLevelXP) / (nextLevelXP - currentLevelXP)) * 100;
+    
+    return (
+      <View style={styles.header}>
+        <LinearGradient
+          colors={['#667eea', '#764ba2']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.headerGradient}
+        >
+          <Text style={styles.headerTitle}>{curriculum.meta.title}</Text>
+          <Text style={styles.headerSubtitle}>{curriculum.meta.description}</Text>
+          
+          <View style={styles.statsContainer}>
+            <View style={styles.statBox}>
+              <Text style={styles.statNumber}>{userProgress.totalXP}</Text>
+              <Text style={styles.statLabel}>Total XP</Text>
+            </View>
+            <View style={styles.statBox}>
+              <Text style={styles.statNumber}>{userProgress.currentLevel}</Text>
+              <Text style={styles.statLabel}>Level</Text>
+            </View>
+            <View style={styles.statBox}>
+              <Text style={styles.statNumber}>{userProgress.completedLessons.length}</Text>
+              <Text style={styles.statLabel}>Lessons</Text>
+            </View>
           </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statNumber}>{userProgress.currentLevel}</Text>
-            <Text style={styles.statLabel}>Level</Text>
+          
+          <View style={styles.levelProgressContainer}>
+            <Text style={styles.levelProgressText}>
+              Level {userProgress.currentLevel} → {userProgress.currentLevel + 1}
+            </Text>
+            <View style={styles.levelProgressBar}>
+              <View style={[styles.levelProgressFill, { width: `${Math.min(progressToNextLevel, 100)}%` }]} />
+            </View>
+            <Text style={styles.levelProgressXP}>
+              {userProgress.totalXP - currentLevelXP} / {nextLevelXP - currentLevelXP} XP
+            </Text>
           </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statNumber}>{userProgress.completedCourses.length}</Text>
-            <Text style={styles.statLabel}>Completed</Text>
-          </View>
-        </View>
-      </LinearGradient>
-    </View>
-  );
+        </LinearGradient>
+      </View>
+    );
+  };
 
   const renderNavigationTabs = () => (
     <View style={styles.tabContainer}>
@@ -187,12 +280,22 @@ export default function CurriculumBasedEducation() {
       </TouchableOpacity>
       
       <TouchableOpacity
+        style={[styles.tab, selectedView === 'lessons' && styles.activeTab]}
+        onPress={() => setSelectedView('lessons')}
+      >
+        <Ionicons name="play-circle" size={20} color={selectedView === 'lessons' ? '#667eea' : '#64748B'} />
+        <Text style={[styles.tabText, selectedView === 'lessons' && styles.activeTabText]}>
+          All Lessons
+        </Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity
         style={[styles.tab, selectedView === 'paths' && styles.activeTab]}
         onPress={() => setSelectedView('paths')}
       >
         <Ionicons name="map" size={20} color={selectedView === 'paths' ? '#667eea' : '#64748B'} />
         <Text style={[styles.tabText, selectedView === 'paths' && styles.activeTabText]}>
-          Learning Paths
+          Paths
         </Text>
       </TouchableOpacity>
       
@@ -202,7 +305,7 @@ export default function CurriculumBasedEducation() {
       >
         <Ionicons name="trophy" size={20} color={selectedView === 'achievements' ? '#667eea' : '#64748B'} />
         <Text style={[styles.tabText, selectedView === 'achievements' && styles.activeTabText]}>
-          Achievements
+          Awards
         </Text>
       </TouchableOpacity>
     </View>
@@ -277,6 +380,60 @@ export default function CurriculumBasedEducation() {
       </View>
     </TouchableOpacity>
   );
+
+  const renderLessonCard = (lesson: Lesson, course: Course) => {
+    const isCompleted = userProgress.completedLessons.includes(lesson.id);
+    
+    return (
+      <TouchableOpacity
+        key={lesson.id}
+        style={[styles.lessonCard, isCompleted && styles.completedLessonCard]}
+        onPress={() => openLesson(lesson)}
+      >
+        <View style={styles.lessonCardHeader}>
+          <View style={styles.lessonCardInfo}>
+            <Text style={styles.lessonCardTitle} numberOfLines={2}>{lesson.title}</Text>
+            <Text style={styles.lessonCardCourse}>{course.title}</Text>
+            <Text style={styles.lessonCardCategory}>{course.category}</Text>
+          </View>
+          <View style={styles.lessonCardMeta}>
+            <Text style={styles.lessonCardDuration}>⏱️ {lesson.duration}</Text>
+            <View style={styles.lessonCardXP}>
+              <Ionicons name="star" size={16} color="#F59E0B" />
+              <Text style={styles.lessonXPText}>{lesson.xpReward} XP</Text>
+            </View>
+          </View>
+        </View>
+        
+        {isCompleted && (
+          <View style={styles.lessonCompletedIndicator}>
+            <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+            <Text style={styles.lessonCompletedText}>Completed</Text>
+          </View>
+        )}
+        
+        {!isCompleted && (
+          <View style={styles.lessonProgressIndicator}>
+            <Ionicons name="play-circle" size={20} color="#667eea" />
+            <Text style={styles.lessonStartText}>Start Lesson</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  const getAllLessons = () => {
+    if (!curriculum) return [];
+    
+    const allLessons: Array<{ lesson: Lesson; course: Course }> = [];
+    curriculum.courses.forEach(course => {
+      course.lessons.forEach(lesson => {
+        allLessons.push({ lesson, course });
+      });
+    });
+    
+    return allLessons;
+  };
 
   const renderAchievement = (achievement: any) => {
     const isUnlocked = userProgress.achievements.includes(achievement.id);
@@ -406,6 +563,20 @@ export default function CurriculumBasedEducation() {
         {selectedView === 'courses' && (
           <View style={styles.coursesContainer}>
             {curriculum.courses.map(renderCourse)}
+          </View>
+        )}
+        
+        {selectedView === 'lessons' && (
+          <View style={styles.lessonsContainer}>
+            <Text style={styles.sectionHeaderText}>
+              All Lessons ({getAllLessons().length})
+            </Text>
+            <Text style={styles.sectionSubtext}>
+              Browse and start any lesson directly
+            </Text>
+            {getAllLessons().map(({ lesson, course }) => 
+              renderLessonCard(lesson, course)
+            )}
           </View>
         )}
         
@@ -835,5 +1006,126 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 16,
     color: '#EF4444',
+  },
+  levelProgressContainer: {
+    marginTop: 16,
+    paddingHorizontal: 8,
+  },
+  levelProgressText: {
+    fontSize: 12,
+    color: '#E2E8F0',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  levelProgressBar: {
+    height: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 4,
+    marginBottom: 4,
+  },
+  levelProgressFill: {
+    height: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 4,
+  },
+  levelProgressXP: {
+    fontSize: 10,
+    color: '#E2E8F0',
+    textAlign: 'center',
+  },
+  lessonsContainer: {
+    paddingHorizontal: 20,
+  },
+  sectionHeaderText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1E293B',
+    marginBottom: 4,
+  },
+  sectionSubtext: {
+    fontSize: 14,
+    color: '#64748B',
+    marginBottom: 20,
+  },
+  lessonCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderLeftWidth: 4,
+    borderLeftColor: '#667eea',
+  },
+  completedLessonCard: {
+    borderLeftColor: '#10B981',
+    backgroundColor: '#F0FDF4',
+  },
+  lessonCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  lessonCardInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  lessonCardTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1E293B',
+    marginBottom: 4,
+  },
+  lessonCardCourse: {
+    fontSize: 14,
+    color: '#667eea',
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  lessonCardCategory: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  lessonCardMeta: {
+    alignItems: 'flex-end',
+  },
+  lessonCardDuration: {
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 4,
+  },
+  lessonCardXP: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  lessonXPText: {
+    fontSize: 12,
+    color: '#F59E0B',
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  lessonCompletedIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  lessonCompletedText: {
+    fontSize: 12,
+    color: '#10B981',
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  lessonProgressIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  lessonStartText: {
+    fontSize: 12,
+    color: '#667eea',
+    fontWeight: '600',
+    marginLeft: 8,
   },
 });

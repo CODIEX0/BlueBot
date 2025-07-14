@@ -13,7 +13,7 @@ import {
   Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@/contexts/AuthContext';
+import { useMobileAuth } from '@/contexts/MobileAuthContext';
 
 interface BiometricSettingsProps {
   onSettingsChange?: (enabled: boolean) => void;
@@ -22,7 +22,7 @@ interface BiometricSettingsProps {
 const BiometricSettings: React.FC<BiometricSettingsProps> = ({ onSettingsChange }) => {
   const [isEnabled, setIsEnabled] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { user, biometricAvailable, enableBiometric, disableBiometric } = useAuth();
+  const { user, biometricAvailable, enableBiometric, disableBiometric } = useMobileAuth();
 
   useEffect(() => {
     setIsEnabled(user?.biometricEnabled || false);

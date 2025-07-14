@@ -20,7 +20,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useAuth } from '@/contexts/AuthContext';
+import { useMobileAuth } from '@/contexts/MobileAuthContext';
 import RecaptchaComponent from '@/components/RecaptchaComponent';
 
 export default function VerifyOTPScreen() {
@@ -30,7 +30,7 @@ export default function VerifyOTPScreen() {
   const [canResend, setCanResend] = useState(false);
   const [showRecaptcha, setShowRecaptcha] = useState(false);
   const [recaptchaVerified, setRecaptchaVerified] = useState(false);
-  const { verifyOTP, resendOTP, verifyRecaptcha } = useAuth();
+  const { verifyOTP, resendOTP, verifyRecaptcha } = useMobileAuth();
   const router = useRouter();
   // For demo purposes, using a default phone number
   const phoneNumber = '+1 (555) 123-4567';

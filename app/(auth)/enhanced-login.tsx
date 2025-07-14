@@ -20,7 +20,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
-import { useAuth } from '@/contexts/AuthContext';
+import { useMobileAuth } from '@/contexts/MobileAuthContext';
 import RecaptchaComponent from '@/components/RecaptchaComponent';
 
 export default function EnhancedLoginScreen() {
@@ -39,7 +39,7 @@ export default function EnhancedLoginScreen() {
     signInWithBiometric, 
     biometricAvailable,
     verifyRecaptcha 
-  } = useAuth();
+  } = useMobileAuth();
   const router = useRouter();
 
   useEffect(() => {

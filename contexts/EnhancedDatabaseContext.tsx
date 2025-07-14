@@ -16,7 +16,7 @@ import {
   Timestamp 
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { useAuth } from './AuthContext';
+import { useMobileAuth } from './MobileAuthContext';
 import NetInfo from '@react-native-community/netinfo';
 
 interface Expense {
@@ -132,7 +132,7 @@ interface DatabaseProviderProps {
 }
 
 export function DatabaseProvider({ children }: DatabaseProviderProps) {
-  const { user } = useAuth();
+  const { user } = useMobileAuth();
   const [db, setDb] = useState<SQLite.SQLiteDatabase | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);

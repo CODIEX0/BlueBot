@@ -20,13 +20,13 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
-import { useAuth } from '@/contexts/AuthContext';
+import { useMobileAuth } from '@/contexts/MobileAuthContext';
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
-  const { resetPassword } = useAuth();
+  const { resetPassword } = useMobileAuth();
   const router = useRouter();
 
   const isValidEmail = (email: string) => {

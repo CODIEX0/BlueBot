@@ -117,10 +117,18 @@ class CurriculumService {
         return this.cachedCurriculum!;
       }
 
-      // Fallback to default curriculum data
-      const defaultCurriculum = this.getDefaultCurriculum();
-      await this.cacheCurriculum(defaultCurriculum);
-      return defaultCurriculum;
+      // Load from curriculum JSON file
+      try {
+        const curriculumData = require('../data/financial-education-curriculum.json');
+        await this.cacheCurriculum(curriculumData);
+        return curriculumData;
+      } catch (fileError) {
+        console.warn('Could not load curriculum JSON file, using default:', fileError);
+        // Fallback to default curriculum data
+        const defaultCurriculum = this.getDefaultCurriculum();
+        await this.cacheCurriculum(defaultCurriculum);
+        return defaultCurriculum;
+      }
     } catch (error) {
       console.error('Error loading curriculum:', error);
       return this.getDefaultCurriculum();
@@ -439,7 +447,7 @@ class CurriculumService {
       totalXP: 0,
       currentLevel: 1,
       achievements: [],
-      lastActive: new Date().toISOString()
+      lastActive: new Date().toISOString(),
     };
   }
 }

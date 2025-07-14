@@ -2,7 +2,7 @@ import React from 'react';
 const { useState, useCallback, useEffect, useRef, useContext, createContext } = React;
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ethers } from 'ethers';
-import { useAuth } from './AuthContext';
+import { useMobileAuth } from './MobileAuthContext';
 
 interface CryptoWallet {
   address: string;
@@ -74,7 +74,7 @@ interface CryptoProviderProps {
 }
 
 export function CryptoProvider({ children }: CryptoProviderProps) {
-  const { user } = useAuth();
+  const { user } = useMobileAuth();
   const [wallet, setWallet] = useState<CryptoWallet | null>(null);
   const [isWalletCreated, setIsWalletCreated] = useState(false);
   const [loading, setLoading] = useState(true);

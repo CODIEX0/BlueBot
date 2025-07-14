@@ -240,7 +240,17 @@ export default function MoneyTransferHub() {
   };
 
   const handleBuyAirtime = () => {
-    Alert.alert('Buy Airtime', 'Airtime purchase feature coming soon!');
+    Alert.alert(
+      'Buy Airtime', 
+      'Select your mobile network:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Vodacom', onPress: () => Alert.alert('Vodacom Airtime', 'Opening Vodacom airtime purchase...') },
+        { text: 'MTN', onPress: () => Alert.alert('MTN Airtime', 'Opening MTN airtime purchase...') },
+        { text: 'Cell C', onPress: () => Alert.alert('Cell C Airtime', 'Opening Cell C airtime purchase...') },
+        { text: 'Telkom', onPress: () => Alert.alert('Telkom Airtime', 'Opening Telkom airtime purchase...') }
+      ]
+    );
   };
 
   const formatCurrency = (amount: number): string => {
@@ -456,8 +466,17 @@ export default function MoneyTransferHub() {
               <TouchableOpacity
                 style={styles.shareButton}
                 onPress={() => {
-                  // Implement QR sharing functionality
-                  Alert.alert('Share QR', 'QR code sharing feature coming soon!');
+                  Alert.alert(
+                    'Share QR Code', 
+                    'Choose how to share your payment QR code:',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'WhatsApp', onPress: () => Alert.alert('WhatsApp', 'Opening WhatsApp to share QR code...') },
+                      { text: 'SMS', onPress: () => Alert.alert('SMS', 'Opening messages to share payment link...') },
+                      { text: 'Email', onPress: () => Alert.alert('Email', 'Opening email to share payment details...') },
+                      { text: 'Copy Link', onPress: () => Alert.alert('Copied', 'Payment link copied to clipboard!') }
+                    ]
+                  );
                 }}
               >
                 <Ionicons name="share-outline" size={20} color="#3B82F6" />

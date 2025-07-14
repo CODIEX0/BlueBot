@@ -20,7 +20,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
-import { useAuth } from '@/contexts/AuthContext';
+import { useMobileAuth } from '@/contexts/MobileAuthContext';
 import RecaptchaComponent from '@/components/RecaptchaComponent';
 
 export default function EnhancedRegisterScreen() {
@@ -43,7 +43,7 @@ export default function EnhancedRegisterScreen() {
     enableBiometric, 
     biometricAvailable,
     verifyRecaptcha 
-  } = useAuth();
+  } = useMobileAuth();
   const router = useRouter();
 
   const isValidEmail = (email: string): boolean => {
