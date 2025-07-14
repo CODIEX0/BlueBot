@@ -158,7 +158,10 @@ export default function ProfileScreen() {
           }} />
 
           {/* Other Security Options */}
-          <TouchableOpacity style={styles.settingItem}>
+          <TouchableOpacity 
+            style={styles.settingItem} 
+            onPress={() => Alert.alert('Change Password', 'Password change functionality coming soon! For now, you can sign out and create a new account.')}
+          >
             <View style={styles.settingLeft}>
               <View style={[styles.settingIcon, { backgroundColor: '#FEF3C7' }]}>
                 <Ionicons name="key" size={20} color="#F59E0B" />
@@ -171,7 +174,10 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.settingItem}>
+          <TouchableOpacity 
+            style={styles.settingItem}
+            onPress={() => Alert.alert('Two-Factor Authentication', '2FA setup coming soon! This will add an extra layer of security to your account.')}
+          >
             <View style={styles.settingLeft}>
               <View style={[styles.settingIcon, { backgroundColor: '#E0E7FF' }]}>
                 <Ionicons name="phone-portrait" size={20} color="#6366F1" />
@@ -184,7 +190,10 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.settingItem}>
+          <TouchableOpacity 
+            style={styles.settingItem}
+            onPress={() => Alert.alert('Login Activity', 'Login activity tracking coming soon! You\'ll be able to see all recent sign-in attempts.')}
+          >
             <View style={styles.settingLeft}>
               <View style={[styles.settingIcon, { backgroundColor: '#FECACA' }]}>
                 <Ionicons name="shield-checkmark" size={20} color="#EF4444" />
@@ -202,7 +211,10 @@ export default function ProfileScreen() {
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>App Settings</Text>
           
-          <TouchableOpacity style={styles.settingItem}>
+          <TouchableOpacity 
+            style={styles.settingItem}
+            onPress={() => Alert.alert('Notifications', 'Notification settings coming soon! You\'ll be able to customize alerts for spending, budgets, and goals.')}
+          >
             <View style={styles.settingLeft}>
               <View style={[styles.settingIcon, { backgroundColor: '#F3E8FF' }]}>
                 <Ionicons name="notifications" size={20} color="#8B5CF6" />
@@ -215,7 +227,10 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.settingItem}>
+          <TouchableOpacity 
+            style={styles.settingItem}
+            onPress={() => Alert.alert('Theme Settings', 'Dark mode and theme customization coming soon!')}
+          >
             <View style={styles.settingLeft}>
               <View style={[styles.settingIcon, { backgroundColor: '#F0F9FF' }]}>
                 <Ionicons name="moon" size={20} color="#0EA5E9" />
@@ -228,7 +243,10 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.settingItem}>
+          <TouchableOpacity 
+            style={styles.settingItem}
+            onPress={() => Alert.alert('Language Settings', 'BlueBot supports multiple South African languages including English, Afrikaans, Zulu, and Xhosa. Full language switching coming soon!')}
+          >
             <View style={styles.settingLeft}>
               <View style={[styles.settingIcon, { backgroundColor: '#ECFDF5' }]}>
                 <Ionicons name="language" size={20} color="#10B981" />

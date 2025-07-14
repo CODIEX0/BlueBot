@@ -23,7 +23,18 @@ import {
   GoogleAuthProvider,
   signInWithCredential,
 } from 'firebase/auth';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+
+// Conditionally import Google Sign-in to avoid module errors
+let GoogleSignin: any = null;
+let statusCodes: any = null;
+try {
+  const googleSigninModule = require('@react-native-google-signin/google-signin');
+  GoogleSignin = googleSigninModule.GoogleSignin;
+  statusCodes = googleSigninModule.statusCodes;
+} catch (error: any) {
+  console.warn('Google Sign-in module not available:', error?.message || 'Unknown error');
+}
+
 import { auth } from '../config/firebase';
 import { useMobileDatabase } from './MobileDatabaseContext';
 
@@ -149,10 +160,12 @@ export function MobileAuthProvider({ children }: MobileAuthProviderProps) {
   const initializeAuth = async () => {
     try {
       // Initialize Google Sign-In
-      GoogleSignin.configure({
-        webClientId: 'YOUR_GOOGLE_WEB_CLIENT_ID', // Replace with your actual web client ID
-        offlineAccess: true,
-      });
+      if (GoogleSignin) {
+        GoogleSignin.configure({
+          webClientId: 'YOUR_GOOGLE_WEB_CLIENT_ID', // Replace with your actual web client ID
+          offlineAccess: true,
+        });
+      }
 
       // Check for stored user session
       const storedUserId = await SecureStore.getItemAsync('current_user_id');
@@ -450,6 +463,10 @@ export function MobileAuthProvider({ children }: MobileAuthProviderProps) {
   };
 
   const signInWithGoogle = async () => {
+    if (!GoogleSignin) {
+      throw new Error('Google Sign-in is not available on this platform');
+    }
+    
     if (!isOnline) {
       throw new Error('Internet connection required for Google sign-in');
     }
@@ -464,7 +481,7 @@ export function MobileAuthProvider({ children }: MobileAuthProviderProps) {
         await syncFirebaseUserWithLocal(result.user);
       }
     } catch (error: any) {
-      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+      if (statusCodes && error.code === statusCodes.SIGN_IN_CANCELLED) {
         throw new Error('Google sign-in was cancelled');
       } else if (error.code === statusCodes.IN_PROGRESS) {
         throw new Error('Google sign-in is in progress');

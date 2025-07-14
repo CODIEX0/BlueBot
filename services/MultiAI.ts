@@ -41,6 +41,14 @@ interface AIResponse {
   };
   provider: string;
   confidence?: number;
+  metadata?: {
+    provider?: string;
+    responseTime?: number;
+    model?: string;
+    timestamp?: string;
+    error?: string;
+    attemptedProviders?: string[];
+  };
 }
 
 class MultiAIService {
@@ -56,89 +64,209 @@ class MultiAIService {
    * Initialize all AI providers
    */
   private initializeProviders() {
-    // DeepSeek - Primary provider
+    // DeepSeek - Primary provider (production-ready)
     this.providers.set('deepseek', {
       name: 'DeepSeek',
       apiKey: process.env.EXPO_PUBLIC_DEEPSEEK_API_KEY || '',
       baseURL: 'https://api.deepseek.com/v1',
       model: 'deepseek-chat',
-      available: !!process.env.EXPO_PUBLIC_DEEPSEEK_API_KEY
+      available: !!process.env.EXPO_PUBLIC_DEEPSEEK_API_KEY && 
+                process.env.EXPO_PUBLIC_DEEPSEEK_API_KEY.startsWith('sk-')
     });
 
-    // Google Gemini - Free tier with good capabilities
+    // Google Gemini - Free tier with good capabilities (production-ready)
     this.providers.set('gemini', {
       name: 'Google Gemini',
       apiKey: process.env.EXPO_PUBLIC_GEMINI_API_KEY || '',
       baseURL: 'https://generativelanguage.googleapis.com/v1beta',
-      model: 'gemini-pro',
-      available: !!process.env.EXPO_PUBLIC_GEMINI_API_KEY
+      model: 'gemini-1.5-flash', // Updated to latest model
+      available: !!process.env.EXPO_PUBLIC_GEMINI_API_KEY && 
+                process.env.EXPO_PUBLIC_GEMINI_API_KEY.startsWith('AIza')
     });
 
-    // Local Llama - For offline usage (requires local setup)
+    // OpenAI - Fallback provider
+    this.providers.set('openai', {
+      name: 'OpenAI',
+      apiKey: process.env.EXPO_PUBLIC_OPENAI_API_KEY || '',
+      baseURL: 'https://api.openai.com/v1',
+      model: 'gpt-4o-mini', // Cost-effective model
+      available: !!process.env.EXPO_PUBLIC_OPENAI_API_KEY && 
+                process.env.EXPO_PUBLIC_OPENAI_API_KEY.startsWith('sk-')
+    });
+
+    // Local Llama - For offline usage (production-ready for local deployment)
     this.providers.set('local', {
       name: 'Local Llama',
       baseURL: 'http://localhost:11434/api',
-      model: 'llama3.2:1b', // Lightweight model for mobile
+      model: 'llama3.2:3b', // More capable model
       available: false // Will check availability on first use
     });
 
-    // Mock provider for development
+    // Anthropic Claude - High-quality alternative
+    this.providers.set('claude', {
+      name: 'Anthropic Claude',
+      apiKey: process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY || '',
+      baseURL: 'https://api.anthropic.com/v1',
+      model: 'claude-3-haiku-20240307', // Fast and cost-effective
+      available: !!process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY && 
+                process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY.startsWith('sk-ant-')
+    });
+
+    // OpenRouter - Community AI API
+    this.providers.set('openrouter', {
+      name: 'OpenRouter',
+      apiKey: process.env.EXPO_PUBLIC_OPENROUTER_API_KEY || '',
+      baseURL: 'https://openrouter.ai/api/v1',
+      model: 'openrouter-gpt-4', // Example model, update as needed
+      available: !!process.env.EXPO_PUBLIC_OPENROUTER_API_KEY && process.env.EXPO_PUBLIC_OPENROUTER_API_KEY.length > 0
+    });
+
+    // Mock provider only for development/testing
     this.providers.set('mock', {
       name: 'Mock AI',
       model: 'mock',
-      available: true
+      available: process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test'
     });
+
+    // Update fallback order to prioritize production providers
+    this.fallbackOrder = [
+      'deepseek',   // Primary - good balance of quality and cost
+      'gemini',     // Free tier available
+      'openai',     // Reliable fallback
+      'openrouter', // Add OpenRouter to fallback order
+      'claude',     // High quality alternative
+      'local',      // Offline capability
+      'mock'        // Development only
+    ];
   }
 
   /**
-   * Send message to AI with automatic fallback
+   * Send message to AI with automatic fallback and comprehensive error handling
    */
   async sendMessage(
     message: string,
     conversationHistory: ChatMessage[] = [],
     userContext?: ChatMessage['context']
   ): Promise<AIResponse> {
+    // Input validation
+    if (!message || message.trim().length === 0) {
+      throw new Error('Message cannot be empty');
+    }
+
+    if (message.length > 5000) {
+      throw new Error('Message too long. Please keep it under 5000 characters.');
+    }
+
     let lastError: Error | null = null;
+    const attemptedProviders: string[] = [];
 
     // Try providers in fallback order
     for (const providerName of this.fallbackOrder) {
       const provider = this.providers.get(providerName);
-      if (!provider || !provider.available) continue;
+      if (!provider || !provider.available) {
+        console.log(`Skipping provider ${providerName}: ${!provider ? 'not found' : 'not available'}`);
+        continue;
+      }
+
+      attemptedProviders.push(providerName);
 
       try {
         console.log(`Attempting to use provider: ${provider.name}`);
         
+        const startTime = Date.now();
         const response = await this.sendToProvider(
           providerName,
           message,
           conversationHistory,
           userContext
         );
+        const responseTime = Date.now() - startTime;
         
         // Update current provider on success
         this.currentProvider = providerName;
+        
+        // Log successful response for monitoring
+        console.log(`Provider ${provider.name} succeeded in ${responseTime}ms`);
+        
+        // Add response metadata
+        response.metadata = {
+          provider: provider.name,
+          responseTime,
+          model: provider.model,
+          timestamp: new Date().toISOString()
+        };
+        
         return response;
       } catch (error) {
         console.warn(`Provider ${provider.name} failed:`, error);
         lastError = error as Error;
         
         // Mark provider as temporarily unavailable if it's an API error
-        if (error instanceof Error && error.message.includes('API')) {
-          provider.available = false;
-          // Re-enable after 5 minutes
-          setTimeout(() => {
-            provider.available = true;
-          }, 5 * 60 * 1000);
+        if (error instanceof Error) {
+          const errorMessage = error.message.toLowerCase();
+          
+          if (errorMessage.includes('401') || errorMessage.includes('403')) {
+            // Authentication error - mark as permanently unavailable
+            provider.available = false;
+            console.error(`Provider ${provider.name} has authentication issues`);
+          } else if (errorMessage.includes('429')) {
+            // Rate limiting - temporary unavailability
+            provider.available = false;
+            setTimeout(() => {
+              provider.available = true;
+            }, 60000); // Re-enable after 1 minute
+          } else if (errorMessage.includes('500') || errorMessage.includes('502') || 
+                    errorMessage.includes('503') || errorMessage.includes('504')) {
+            // Server errors - temporary unavailability
+            provider.available = false;
+            setTimeout(() => {
+              provider.available = true;
+            }, 30000); // Re-enable after 30 seconds
+          }
         }
       }
     }
 
-    // If all providers fail, return error response
+    // If all providers fail, return comprehensive error response
+    const errorMessage = this.buildErrorMessage(lastError, attemptedProviders);
+    
     return {
-      message: `I'm having trouble connecting to my services right now. ${lastError?.message || 'Please try again later.'}`,
-      suggestions: ['Check your internet connection', 'Try again in a few moments'],
-      provider: 'error'
+      message: errorMessage,
+      suggestions: [
+        'Check your internet connection',
+        'Try again in a few moments',
+        'Contact support if the problem persists'
+      ],
+      provider: 'error',
+      metadata: {
+        error: lastError?.message || 'Unknown error',
+        attemptedProviders,
+        timestamp: new Date().toISOString()
+      }
     };
+  }
+
+  /**
+   * Build comprehensive error message
+   */
+  private buildErrorMessage(error: Error | null, attemptedProviders: string[]): string {
+    if (attemptedProviders.length === 0) {
+      return "I'm currently not connected to any AI services. Please check your configuration and try again.";
+    }
+
+    if (error?.message.includes('network') || error?.message.includes('timeout')) {
+      return "I'm having trouble connecting to my AI services due to network issues. Please check your internet connection and try again.";
+    }
+
+    if (error?.message.includes('401') || error?.message.includes('403')) {
+      return "There's an authentication issue with my AI services. Please contact support.";
+    }
+
+    if (error?.message.includes('429')) {
+      return "I'm currently receiving too many requests. Please wait a moment and try again.";
+    }
+
+    return `I'm experiencing technical difficulties with my AI services. I tried ${attemptedProviders.length} provider(s) but none are currently available. Please try again later.`;
   }
 
   /**
@@ -153,18 +281,57 @@ class MultiAIService {
     const provider = this.providers.get(providerName);
     if (!provider) throw new Error(`Provider ${providerName} not found`);
 
-    switch (providerName) {
-      case 'deepseek':
-        return this.sendToDeepSeek(message, conversationHistory, userContext);
-      case 'gemini':
-        return this.sendToGemini(message, conversationHistory, userContext);
-      case 'local':
-        return this.sendToLocalLlama(message, conversationHistory, userContext);
-      case 'mock':
-        return this.sendToMockProvider(message, conversationHistory, userContext);
-      default:
-        throw new Error(`Unknown provider: ${providerName}`);
+    // Add request timeout and retry logic
+    const maxRetries = 3;
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        switch (providerName) {
+          case 'deepseek':
+            return await this.sendToDeepSeek(message, conversationHistory, userContext);
+          case 'gemini':
+            return await this.sendToGemini(message, conversationHistory, userContext);
+          case 'openai':
+            return await this.sendToOpenAI(message, conversationHistory, userContext);
+          case 'claude':
+            return await this.sendToClaude(message, conversationHistory, userContext);
+          case 'local':
+            return await this.sendToLocalLlama(message, conversationHistory, userContext);
+          case 'mock':
+            return await this.sendToMockProvider(message, conversationHistory, userContext);
+          case 'openrouter':
+            return await this.sendToOpenRouter(message, conversationHistory, userContext);
+          default:
+            throw new Error(`Unknown provider: ${providerName}`);
+        }
+      } catch (error) {
+        lastError = error as Error;
+        
+        // Don't retry for certain errors
+        if (error instanceof Error) {
+          if (error.message.includes('401') || error.message.includes('403')) {
+            // Authentication errors - don't retry
+            throw error;
+          }
+          if (error.message.includes('429')) {
+            // Rate limiting - wait before retry
+            const delay = Math.pow(2, attempt) * 1000; // Exponential backoff
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+        }
+        
+        if (attempt === maxRetries) {
+          throw lastError;
+        }
+        
+        // Brief delay before retry
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
     }
+
+    throw lastError || new Error('Max retries exceeded');
   }
 
   /**
@@ -229,6 +396,7 @@ class MultiAIService {
         headers: {
           'Content-Type': 'application/json',
         },
+        signal: AbortSignal.timeout(30000), // 30 second timeout
         body: JSON.stringify({
           contents: [{
             parts: [{
@@ -240,13 +408,24 @@ class MultiAIService {
             maxOutputTokens: 500,
             topP: 0.8,
             topK: 10
-          }
+          },
+          safetySettings: [
+            {
+              category: "HARM_CATEGORY_HARASSMENT",
+              threshold: "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+              category: "HARM_CATEGORY_HATE_SPEECH",
+              threshold: "BLOCK_MEDIUM_AND_ABOVE"
+            }
+          ]
         })
       }
     );
 
     if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
+      const errorData = await response.text();
+      throw new Error(`Gemini API error: ${response.status} ${response.statusText} - ${errorData}`);
     }
 
     const data = await response.json();
@@ -254,12 +433,114 @@ class MultiAIService {
 
     return {
       ...this.parseAIResponse(aiMessage),
-      provider: 'Gemini'
+      provider: 'Gemini',
+      confidence: data.candidates?.[0]?.safetyRatings ? 0.9 : 0.8
     };
   }
 
   /**
-   * Local Llama implementation (Ollama)
+   * OpenAI API implementation
+   */
+  private async sendToOpenAI(
+    message: string,
+    conversationHistory: ChatMessage[],
+    userContext?: ChatMessage['context']
+  ): Promise<AIResponse> {
+    const provider = this.providers.get('openai')!;
+    
+    const systemPrompt = this.buildSystemPrompt(userContext);
+    const messages = this.buildMessageHistory(systemPrompt, conversationHistory, message);
+
+    const response = await fetch(`${provider.baseURL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${provider.apiKey}`,
+        'User-Agent': 'BlueBot/1.0'
+      },
+      signal: AbortSignal.timeout(30000),
+      body: JSON.stringify({
+        model: provider.model,
+        messages: messages,
+        max_tokens: 500,
+        temperature: 0.7,
+        top_p: 0.9,
+        frequency_penalty: 0.1,
+        presence_penalty: 0.1,
+        stream: false
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`OpenAI API error: ${response.status} ${response.statusText} - ${errorData}`);
+    }
+
+    const data = await response.json();
+    const aiMessage = data.choices[0]?.message?.content || 'Sorry, I couldn\'t process that request.';
+
+    return {
+      ...this.parseAIResponse(aiMessage),
+      provider: 'OpenAI',
+      confidence: 0.95
+    };
+  }
+
+  /**
+   * Anthropic Claude API implementation
+   */
+  private async sendToClaude(
+    message: string,
+    conversationHistory: ChatMessage[],
+    userContext?: ChatMessage['context']
+  ): Promise<AIResponse> {
+    const provider = this.providers.get('claude')!;
+    
+    const systemPrompt = this.buildSystemPrompt(userContext);
+    
+    // Claude has a different message format
+    const messages = conversationHistory.map(msg => ({
+      role: msg.role === 'assistant' ? 'assistant' : 'user',
+      content: msg.content
+    }));
+    
+    messages.push({ role: 'user', content: message });
+
+    const response = await fetch(`${provider.baseURL}/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${provider.apiKey}`,
+        'anthropic-version': '2023-06-01',
+        'User-Agent': 'BlueBot/1.0'
+      },
+      signal: AbortSignal.timeout(30000),
+      body: JSON.stringify({
+        model: provider.model,
+        max_tokens: 500,
+        temperature: 0.7,
+        system: systemPrompt,
+        messages: messages
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`Claude API error: ${response.status} ${response.statusText} - ${errorData}`);
+    }
+
+    const data = await response.json();
+    const aiMessage = data.content?.[0]?.text || 'Sorry, I couldn\'t process that request.';
+
+    return {
+      ...this.parseAIResponse(aiMessage),
+      provider: 'Claude',
+      confidence: 0.92
+    };
+  }
+
+  /**
+   * Local Llama implementation (Ollama) - Production Ready
    */
   private async sendToLocalLlama(
     message: string,
@@ -268,44 +549,58 @@ class MultiAIService {
   ): Promise<AIResponse> {
     const provider = this.providers.get('local')!;
 
-    // Check if local server is available
+    // Check if local server is available with proper health check
     try {
       const healthCheck = await fetch(`${provider.baseURL}/tags`, {
         method: 'GET',
-        signal: AbortSignal.timeout(2000) // 2 second timeout
+        signal: AbortSignal.timeout(5000) // 5 second timeout for health check
       });
       
       if (!healthCheck.ok) {
         provider.available = false;
         throw new Error('Local Llama server not available');
       }
+      
+      // Update availability status
+      provider.available = true;
     } catch (error) {
       provider.available = false;
-      throw new Error('Local Llama server not reachable');
+      throw new Error(`Local Llama server not reachable: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
     const systemPrompt = this.buildSystemPrompt(userContext);
-    const messages = this.buildMessageHistory(systemPrompt, conversationHistory, message);
+    
+    // Build conversation context for Ollama
+    const conversationText = conversationHistory.map(msg => 
+      `${msg.role === 'user' ? 'Human' : 'Assistant'}: ${msg.content}`
+    ).join('\n');
+    
+    const fullPrompt = `${systemPrompt}\n\nConversation:\n${conversationText}\nHuman: ${message}\nAssistant:`;
 
     const response = await fetch(`${provider.baseURL}/generate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
+      signal: AbortSignal.timeout(45000), // 45 second timeout for generation
       body: JSON.stringify({
         model: provider.model,
-        prompt: messages.map(m => `${m.role}: ${m.content}`).join('\n'),
+        prompt: fullPrompt,
         stream: false,
         options: {
           temperature: 0.7,
           top_p: 0.8,
-          max_tokens: 500
+          top_k: 40,
+          max_tokens: 500,
+          repeat_penalty: 1.1,
+          seed: Math.floor(Math.random() * 1000000)
         }
       })
     });
 
     if (!response.ok) {
-      throw new Error(`Local Llama error: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      throw new Error(`Local Llama error: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
     const data = await response.json();
@@ -313,7 +608,8 @@ class MultiAIService {
 
     return {
       ...this.parseAIResponse(aiMessage),
-      provider: 'Local Llama'
+      provider: 'Local Llama',
+      confidence: 0.85
     };
   }
 
@@ -545,12 +841,43 @@ Always be encouraging, supportive, and provide specific, actionable advice relev
   }
 
   /**
-   * Switch provider manually
+   * List all available provider keys
+   */
+  listProviderKeys(): string[] {
+    return Array.from(this.providers.keys());
+  }
+
+  /**
+   * Get provider details for UI display
+   */
+  getProviderDetails(): { key: string; name: string; model: string; available: boolean }[] {
+    return Array.from(this.providers.entries()).map(([key, provider]) => ({
+      key,
+      name: provider.name,
+      model: provider.model,
+      available: provider.available
+    }));
+  }
+
+  /**
+   * Register a callback for provider change (for UI updates)
+   */
+  private providerChangeCallbacks: Array<(provider: string) => void> = [];
+  onProviderChange(cb: (provider: string) => void) {
+    this.providerChangeCallbacks.push(cb);
+  }
+  private notifyProviderChange() {
+    this.providerChangeCallbacks.forEach(cb => cb(this.currentProvider));
+  }
+
+  /**
+   * Switch provider manually and notify listeners
    */
   switchProvider(providerName: string): boolean {
     const provider = this.providers.get(providerName);
     if (provider && provider.available) {
       this.currentProvider = providerName;
+      this.notifyProviderChange();
       return true;
     }
     return false;
@@ -571,6 +898,50 @@ Always be encouraging, supportive, and provide specific, actionable advice relev
       console.error(`Provider ${providerName} test failed:`, error);
       return false;
     }
+  }
+
+  /**
+   * Send message to OpenRouter provider
+   */
+  private async sendToOpenRouter(
+    message: string,
+    conversationHistory: ChatMessage[],
+    userContext?: ChatMessage['context']
+  ): Promise<AIResponse> {
+    const provider = this.providers.get('openrouter');
+    if (!provider || !provider.apiKey) {
+      throw new Error('OpenRouter API key not configured');
+    }
+    const systemPrompt = this.buildSystemPrompt(userContext);
+    const messages = this.buildMessageHistory(systemPrompt, conversationHistory, message);
+    const response = await fetch(`${provider.baseURL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${provider.apiKey}`
+      },
+      body: JSON.stringify({
+        model: provider.model,
+        messages,
+        max_tokens: 1024,
+        temperature: 0.7
+      })
+    });
+    if (!response.ok) {
+      throw new Error(`OpenRouter API error: ${response.status}`);
+    }
+    const data = await response.json();
+    const aiMessage = data.choices?.[0]?.message?.content || '';
+    return {
+      message: aiMessage,
+      provider: 'openrouter',
+      confidence: 0.9,
+      metadata: {
+        model: provider.model,
+        responseTime: 0,
+        timestamp: new Date().toISOString()
+      }
+    };
   }
 }
 

@@ -1,5 +1,4 @@
-import React from 'react';
-const { useState, useCallback, useEffect, useRef } = React;
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -53,6 +52,8 @@ export default function AIChat() {
   const [isTyping, setIsTyping] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [chatContext, setChatContext] = useState<any>({});
+  const [selectedProvider, setSelectedProvider] = useState(MultiAI.getCurrentProvider());
+  const [availableProviders, setAvailableProviders] = useState<{ key: string; name: string; model: string; available: boolean }[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
 
   // Handle suggestion clicks
@@ -86,22 +87,24 @@ export default function AIChat() {
     try {
       setIsLoading(true);
       
-      // Get user context for better AI responses
+      // Use real chatContext for userBalance, recentExpenses, etc.
       const context = {
-        userBalance: 15000, // This would come from real data
+        userBalance: user?.balance ?? 0, // Use real user balance if available
         recentExpenses: chatContext.recentExpenses?.slice(0, 5) || [],
-        financialGoals: [
-          { title: 'Emergency Fund', targetAmount: 10000, currentAmount: 3500 },
-        ]
+        financialGoals: user?.goals || [], // Use real user goals if available
       };
 
-      const response = await MultiAI.sendMessage(message, messages.map(m => ({
-        id: m.id,
-        role: m.user ? 'user' : 'assistant',
-        content: m.text,
-        timestamp: m.timestamp,
-        context: m.user ? undefined : context
-      })), context);
+      const response = await MultiAI.sendMessage(
+        message,
+        messages.map(m => ({
+          id: m.id,
+          role: m.user ? 'user' : 'assistant',
+          content: m.text,
+          timestamp: m.timestamp,
+          context: m.user ? undefined : context
+        })),
+        context
+      );
 
       // Add AI response to messages
       const aiMessage: Message = {
@@ -139,6 +142,29 @@ export default function AIChat() {
     }
   };
 
+  // Load real user context for AI
+  const loadChatContext = async () => {
+    try {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+      const recentExpenses = await getExpensesByDateRange(
+        startDate.toISOString().split('T')[0],
+        endDate.toISOString().split('T')[0]
+      );
+      // Optionally, fetch goals and balance from backend if available
+      setChatContext({
+        recentExpenses,
+        totalSpent: recentExpenses.reduce((sum, exp) => sum + exp.amount, 0),
+        expenseCount: recentExpenses.length,
+        lastUpdated: new Date(),
+        // Add more real data as needed
+      });
+    } catch (error) {
+      console.warn('Failed to load chat context:', error);
+    }
+  };
+
   // Initialize chat with welcome message
   useEffect(() => {
     if (messages.length === 0) {
@@ -153,29 +179,6 @@ export default function AIChat() {
       loadChatContext();
     }
   }, [user]);
-
-  const loadChatContext = async () => {
-    try {
-      // Load recent expenses and financial data for context
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - 30);
-      
-      const recentExpenses = await getExpensesByDateRange(
-        startDate.toISOString().split('T')[0], 
-        endDate.toISOString().split('T')[0]
-      );
-      
-      setChatContext({
-        recentExpenses,
-        totalSpent: recentExpenses.reduce((sum, exp) => sum + exp.amount, 0),
-        expenseCount: recentExpenses.length,
-        lastUpdated: new Date(),
-      });
-    } catch (error) {
-      console.warn('Failed to load chat context:', error);
-    }
-  };
 
   const quickActions: QuickAction[] = [
     {
@@ -286,31 +289,7 @@ export default function AIChat() {
   };
 
   const getLocalResponse = (message: string): string => {
-    const lowerMessage = message.toLowerCase();
-    
-    if (lowerMessage.includes('spending') || lowerMessage.includes('analyze')) {
-      const totalSpent = chatContext.totalSpent || 0;
-      const expenseCount = chatContext.expenseCount || 0;
-      return `I've analyzed your recent spending. You've spent R${totalSpent.toFixed(2)} across ${expenseCount} transactions this month. Would you like me to break this down by category or suggest ways to optimize your spending?`;
-    }
-    
-    if (lowerMessage.includes('budget') || lowerMessage.includes('advice')) {
-      return "Based on South African financial best practices, I recommend the 50/30/20 rule: 50% for needs (rent, groceries, transport), 30% for wants (entertainment, dining out), and 20% for savings and debt repayment. Would you like me to help you create a personalized budget?";
-    }
-    
-    if (lowerMessage.includes('save') || lowerMessage.includes('savings')) {
-      return "Here are some South African savings tips tailored for you: 1) Consider a tax-free savings account (TFSA) - save up to R36,000/year tax-free. 2) Look into unit trusts for long-term growth. 3) Use the envelope method for monthly budgeting. Would you like specific advice for any of these?";
-    }
-    
-    if (lowerMessage.includes('goal')) {
-      return "Setting financial goals is crucial! Popular goals include emergency funds (3-6 months expenses), home deposits (typically 10% of property value), and retirement savings. What financial goal would you like to work towards?";
-    }
-    
-    if (lowerMessage.includes('receipt') || lowerMessage.includes('scan')) {
-      return "I can help you track expenses by scanning receipts! Just tap the 'Scan receipt' button or use the camera feature. I'll automatically categorize your purchases and add them to your expense tracking.";
-    }
-    
-    return "I'm here to help with your financial questions! I can analyze spending, provide budget advice, help set savings goals, scan receipts, or explain financial concepts. What would you like to focus on today?";
+    return "Sorry, this feature is not available offline. Please check your connection.";
   };
 
   const sendQuickAction = useCallback((actionText: string) => {
@@ -338,13 +317,48 @@ export default function AIChat() {
     }
   };
 
+  useEffect(() => {
+    setAvailableProviders(MultiAI.getProviderDetails());
+    MultiAI.onProviderChange((provider) => {
+      setSelectedProvider(MultiAI.getCurrentProvider());
+    });
+  }, []);
+
+  const handleProviderChange = (providerKey: string) => {
+    if (MultiAI.switchProvider(providerKey)) {
+      setSelectedProvider(MultiAI.getCurrentProvider());
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
+      {/* Provider Switcher */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', margin: 10 }}>
+        <Text style={{ fontWeight: 'bold', marginRight: 8 }}>AI Provider:</Text>
+        {availableProviders.map((prov) => (
+          <TouchableOpacity
+            key={prov.key}
+            style={{
+              backgroundColor: prov.key === selectedProvider ? '#10B981' : '#E5E7EB',
+              padding: 6,
+              borderRadius: 6,
+              marginRight: 6,
+              opacity: prov.available ? 1 : 0.5
+            }}
+            disabled={!prov.available}
+            onPress={() => handleProviderChange(prov.key)}
+          >
+            <Text style={{ color: prov.key === selectedProvider ? 'white' : '#1E293B', fontSize: 12 }}>
+              {prov.name}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      {/* Header */}
       <KeyboardAvoidingView 
         style={styles.keyboardContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerContent}>
             <View style={styles.botAvatar}>

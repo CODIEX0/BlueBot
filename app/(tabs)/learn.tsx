@@ -1,18 +1,18 @@
 /**
  * Learn Tab - Financial Education Page
- * Uses the Enhanced Financial Education component
+ * Uses the Comprehensive Curriculum-Based Education component
  */
 
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import SimpleFinancialEducation from '../../components/SimpleFinancialEducation';
+import CurriculumBasedEducation from '../../components/CurriculumBasedEducation';
 
 export default function Learn() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <SimpleFinancialEducation />
+        <CurriculumBasedEducation />
       </View>
     </SafeAreaView>
   );

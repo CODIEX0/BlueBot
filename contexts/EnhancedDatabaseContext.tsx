@@ -68,6 +68,17 @@ interface FinancialGoal {
   syncStatus: 'synced' | 'pending' | 'error';
 }
 
+interface EducationProgress {
+  userId: string;
+  totalXP: number;
+  level: number;
+  completedModules: string[]; // Array of module IDs
+  achievements: string[]; // Array of achievement IDs
+  lastCompletedTimestamp?: string;
+  updatedAt: string;
+  syncStatus: 'synced' | 'pending' | 'error';
+}
+
 interface DatabaseContextType {
   // Connection status
   isOnline: boolean;
@@ -92,6 +103,10 @@ interface DatabaseContextType {
   updateFinancialGoal: (id: string, updates: Partial<FinancialGoal>) => Promise<void>;
   deleteFinancialGoal: (id: string) => Promise<void>;
   
+  // Education Progress
+  educationProgress: EducationProgress | null;
+  completeModule: (moduleId: string, xpReward: number) => Promise<void>;
+
   // Categories
   getCategories: () => string[];
   getCategoryTotals: (startDate?: string, endDate?: string) => { [category: string]: number };
@@ -122,6 +137,7 @@ export function DatabaseProvider({ children }: DatabaseProviderProps) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [financialGoals, setFinancialGoals] = useState<FinancialGoal[]>([]);
+  const [educationProgress, setEducationProgress] = useState<EducationProgress | null>(null);
   const [isOnline, setIsOnline] = useState(true);
 
   useEffect(() => {
@@ -202,6 +218,17 @@ export function DatabaseProvider({ children }: DatabaseProviderProps) {
           userId TEXT NOT NULL,
           isActive INTEGER DEFAULT 1,
           createdAt TEXT NOT NULL,
+          updatedAt TEXT NOT NULL,
+          syncStatus TEXT DEFAULT 'pending'
+        );
+
+        CREATE TABLE IF NOT EXISTS education_progress (
+          userId TEXT PRIMARY KEY,
+          totalXP INTEGER DEFAULT 0,
+          level INTEGER DEFAULT 1,
+          completedModules TEXT,
+          achievements TEXT,
+          lastCompletedTimestamp TEXT,
           updatedAt TEXT NOT NULL,
           syncStatus TEXT DEFAULT 'pending'
         );
@@ -289,6 +316,50 @@ export function DatabaseProvider({ children }: DatabaseProviderProps) {
         syncStatus: row.syncStatus as 'synced' | 'pending' | 'error',
       }));
       setFinancialGoals(localGoals);
+
+      // Load education progress
+      const progressResult = await db.getFirstAsync(
+        'SELECT * FROM education_progress WHERE userId = ?',
+        [user.id]
+      );
+
+      if (progressResult) {
+        const localProgress: EducationProgress = {
+          userId: progressResult.userId,
+          totalXP: progressResult.totalXP,
+          level: progressResult.level,
+          completedModules: JSON.parse(progressResult.completedModules || '[]'),
+          achievements: JSON.parse(progressResult.achievements || '[]'),
+          lastCompletedTimestamp: progressResult.lastCompletedTimestamp,
+          updatedAt: progressResult.updatedAt,
+          syncStatus: progressResult.syncStatus as 'synced' | 'pending' | 'error',
+        };
+        setEducationProgress(localProgress);
+      } else {
+        // Create initial progress if none exists
+        const initialProgress: EducationProgress = {
+          userId: user.id,
+          totalXP: 0,
+          level: 1,
+          completedModules: [],
+          achievements: [],
+          updatedAt: new Date().toISOString(),
+          syncStatus: 'pending',
+        };
+        await db.runAsync(
+          'INSERT INTO education_progress (userId, totalXP, level, completedModules, achievements, updatedAt, syncStatus) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [
+            initialProgress.userId,
+            initialProgress.totalXP,
+            initialProgress.level,
+            JSON.stringify(initialProgress.completedModules),
+            JSON.stringify(initialProgress.achievements),
+            initialProgress.updatedAt,
+            initialProgress.syncStatus,
+          ]
+        );
+        setEducationProgress(initialProgress);
+      }
     } catch (error) {
       console.error('Error loading local data:', error);
     }
@@ -339,6 +410,51 @@ export function DatabaseProvider({ children }: DatabaseProviderProps) {
     return () => {
       unsubscribeExpenses();
     };
+  };
+
+  const completeModule = async (moduleId: string, xpReward: number) => {
+    if (!user || !db || !educationProgress) return;
+
+    const now = new Date().toISOString();
+    const newTotalXP = (educationProgress.totalXP || 0) + xpReward;
+    const newLevel = Math.floor(newTotalXP / 500) + 1;
+    const updatedCompletedModules = [...new Set([...educationProgress.completedModules, moduleId])];
+
+    const updatedProgress: EducationProgress = {
+      ...educationProgress,
+      totalXP: newTotalXP,
+      level: newLevel,
+      completedModules: updatedCompletedModules,
+      lastCompletedTimestamp: now,
+      updatedAt: now,
+      syncStatus: 'pending',
+    };
+
+    setEducationProgress(updatedProgress);
+
+    try {
+      await db.runAsync(
+        `INSERT OR REPLACE INTO education_progress 
+         (userId, totalXP, level, completedModules, achievements, lastCompletedTimestamp, updatedAt, syncStatus) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          updatedProgress.userId,
+          updatedProgress.totalXP,
+          updatedProgress.level,
+          JSON.stringify(updatedProgress.completedModules),
+          JSON.stringify(updatedProgress.achievements),
+          updatedProgress.lastCompletedTimestamp,
+          updatedProgress.updatedAt,
+          updatedProgress.syncStatus,
+        ]
+      );
+
+      if (isOnline) {
+        // Sync to Firebase
+      }
+    } catch (error) {
+      console.error('Error completing module:', error);
+    }
   };
 
   const addExpense = async (expenseData: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'syncStatus'>) => {
@@ -785,7 +901,7 @@ export function DatabaseProvider({ children }: DatabaseProviderProps) {
     return JSON.stringify(data, null, 2);
   };
 
-  const value: DatabaseContextType = {
+  const value = {
     isOnline,
     expenses,
     addExpense,
@@ -801,6 +917,8 @@ export function DatabaseProvider({ children }: DatabaseProviderProps) {
     addFinancialGoal,
     updateFinancialGoal,
     deleteFinancialGoal,
+    educationProgress,
+    completeModule,
     getCategories,
     getCategoryTotals,
     syncData,

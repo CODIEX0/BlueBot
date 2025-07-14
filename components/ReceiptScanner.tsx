@@ -21,7 +21,7 @@ import {
   RefreshCw,
   Upload,
 } from 'lucide-react-native';
-import ReceiptOCR from '../services/receiptOCR';
+import ReceiptOCR from '../services/receiptOCR_Production';
 import { useDatabase } from '../contexts/DatabaseContext';
 
 interface ReceiptScannerProps {

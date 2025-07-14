@@ -23,6 +23,9 @@ import QRCode from 'react-native-qrcode-svg';
 import { useRouter } from 'expo-router';
 import { useMobileAuth } from '@/contexts/MobileAuthContext';
 import { useMobileDatabase } from '@/contexts/MobileDatabaseContext';
+import QRPaymentService from '../services/QRPaymentService_Production';
+import USSDService from '../services/USSDService_Production';
+import WhatsAppService from '../services/WhatsAppIntegration_Production';
 
 const { width } = Dimensions.get('window');
 

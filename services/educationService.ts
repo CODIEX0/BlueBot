@@ -1,20 +1,26 @@
 /**
  * Financial Education Service
- * Provides financial literacy content and courses for South African users
+ * Provides comprehensive financial literacy content and courses for South African users
+ * Features world-class curriculum meeting international education standards
  */
+
+// Import the comprehensive curriculum data
+import curriculumData from '../data/financial-education-curriculum.json';
 
 export interface Course {
   id: string;
   title: string;
   description: string;
   difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
-  duration: string; // e.g., "30 minutes"
+  duration: string; // e.g., "8 hours"
   lessons: Lesson[];
-  category: 'Budgeting' | 'Saving' | 'Investing' | 'Credit' | 'Insurance' | 'Crypto';
+  category: 'Foundations' | 'Budgeting' | 'Saving' | 'Investing' | 'Credit' | 'Insurance' | 'Crypto' | 'Tax' | 'Business' | 'Estate' | 'Advanced';
   thumbnail: string;
   xpReward: number;
   completed: boolean;
   progress: number; // 0-100
+  prerequisites: string[];
+  learningOutcomes: string[];
 }
 
 export interface Lesson {
@@ -65,314 +71,48 @@ export interface Achievement {
 }
 
 class FinancialEducationService {
-  private courses: Course[] = [
-    {
-      id: 'budgeting-basics',
-      title: 'Budgeting Basics for South Africa',
-      description: 'Learn how to create and manage a budget that works in the South African economic context.',
-      difficulty: 'Beginner',
-      duration: '45 minutes',
-      category: 'Budgeting',
-      thumbnail: '📊',
-      xpReward: 100,
+  private courses: Course[] = [];
+  private achievements: Achievement[] = [];
+
+  constructor() {
+    this.loadCurriculumData();
+  }
+
+  private loadCurriculumData() {
+    // Load courses from JSON curriculum
+    this.courses = curriculumData.courses.map(course => ({
+      ...course,
+      difficulty: course.difficulty as 'Beginner' | 'Intermediate' | 'Advanced',
+      category: course.category as Course['category'],
       completed: false,
       progress: 0,
-      lessons: [
-        {
-          id: 'lesson-1',
-          title: 'Understanding Your Income',
-          content: `In South Africa, understanding your income is the foundation of good budgeting. Whether you earn a salary, wages, or have irregular income, knowing exactly how much money comes in each month is crucial.
+      lessons: course.lessons.map(lesson => ({
+        ...lesson,
+        type: lesson.type as 'text' | 'video' | 'quiz' | 'interactive',
+        completed: false
+      }))
+    }));
 
-**Types of Income in SA:**
-- Salary (monthly fixed amount)
-- Wages (hourly or daily rates)
-- Commission and bonuses
-- Government grants (like child support grant)
-- Side hustle income
-- Investment returns
-
-**Important Considerations:**
-- Always budget based on your NET income (after tax)
-- Factor in deductions like UIF, medical aid, and pension
-- Consider the 13th cheque as a bonus, not regular income
-- If income is irregular, use the lowest monthly amount for budgeting
-
-**Action Steps:**
-1. Gather 3 months of payslips
-2. Calculate your average monthly net income
-3. List all sources of income
-4. Identify which income is guaranteed vs. variable`,
-          type: 'text',
-          duration: '10 minutes',
-          xpReward: 25,
-          completed: false
-        },
-        {
-          id: 'lesson-2',
-          title: 'The 50/30/20 Rule (SA Edition)',
-          content: `The 50/30/20 rule is a simple budgeting framework adapted for South African conditions:
-
-**50% - NEEDS (Essential Expenses)**
-- Rent/bond payments
-- Groceries and household items
-- Transport costs (taxi, petrol, car payments)
-- Utilities (electricity, water, cell phone)
-- Medical aid and insurance
-- Minimum debt payments
-
-**30% - WANTS (Lifestyle Expenses)**
-- Entertainment and dining out
-- Hobbies and recreation
-- Clothing (beyond basics)
-- Subscriptions (DSTV, Netflix, gym)
-- Personal care and beauty
-
-**20% - SAVINGS & DEBT REPAYMENT**
-- Emergency fund
-- Retirement savings
-- Tax-free savings account
-- Extra debt payments
-- Investment contributions
-
-**SA-Specific Adjustments:**
-- High transport costs might require 55/25/20 split
-- Consider load shedding costs (inverter, generator)
-- Factor in extended family support obligations
-- Account for irregular expenses like school fees`,
-          type: 'text',
-          duration: '15 minutes',
-          xpReward: 25,
-          completed: false
-        },
-        {
-          id: 'quiz-1',
-          title: 'Budgeting Knowledge Check',
-          content: '',
-          type: 'quiz',
-          duration: '10 minutes',
-          xpReward: 50,
-          completed: false,
-          quiz: {
-            passingScore: 70,
-            questions: [
-              {
-                id: 'q1',
-                question: 'What percentage of your income should go to NEEDS according to the 50/30/20 rule?',
-                options: ['30%', '50%', '20%', '40%'],
-                correctAnswer: 1,
-                explanation: 'According to the 50/30/20 rule, 50% of your income should go to essential needs like rent, groceries, and transport.'
-              },
-              {
-                id: 'q2',
-                question: 'Which of these is considered a NEED in the South African context?',
-                options: ['DSTV subscription', 'Taxi fare to work', 'Eating out', 'Gym membership'],
-                correctAnswer: 1,
-                explanation: 'Transport to work (including taxi fare) is an essential need in South Africa where public transport is often necessary for employment.'
-              },
-              {
-                id: 'q3',
-                question: 'What should you base your budget on?',
-                options: ['Gross income', 'Net income (after tax)', 'Expected bonuses', 'Maximum possible income'],
-                correctAnswer: 1,
-                explanation: 'Always budget based on your net income (after tax and deductions) to ensure realistic planning.'
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
-      id: 'saving-strategies',
-      title: 'Smart Saving Strategies for SA',
-      description: 'Discover effective ways to save money in the South African economy, from emergency funds to long-term investments.',
-      difficulty: 'Beginner',
-      duration: '50 minutes',
-      category: 'Saving',
-      thumbnail: '💰',
-      xpReward: 120,
-      completed: false,
-      progress: 0,
-      lessons: [
-        {
-          id: 'lesson-1',
-          title: 'Building Your Emergency Fund',
-          content: `An emergency fund is your financial safety net. In South Africa's uncertain economic climate, it's more important than ever.
-
-**Why Emergency Funds Matter in SA:**
-- Job market volatility
-- Load shedding and infrastructure challenges
-- Medical emergencies with limited public healthcare
-- Economic uncertainty and inflation
-
-**How Much to Save:**
-- Minimum: R1,000 starter emergency fund
-- Goal: 3-6 months of living expenses
-- High-risk jobs: 6-12 months of expenses
-
-**Where to Keep Your Emergency Fund:**
-- High-yield savings account
-- Money market account
-- 32-day notice account (for higher amounts)
-- NOT in investments that can lose value
-
-**Building Strategy:**
-1. Start with R50-R100 per month
-2. Save windfalls (tax refunds, bonuses)
-3. Automate transfers on payday
-4. Gradually increase contribution amounts
-5. Keep it separate from daily banking`,
-          type: 'text',
-          duration: '12 minutes',
-          xpReward: 30,
-          completed: false
-        },
-        {
-          id: 'lesson-2',
-          title: 'Tax-Free Savings Accounts (TFSA)',
-          content: `Tax-Free Savings Accounts are one of South Africa's best savings tools. Understanding how to use them effectively can significantly boost your wealth.
-
-**TFSA Benefits:**
-- No tax on interest, dividends, or capital gains
-- R36,000 annual contribution limit
-- R500,000 lifetime contribution limit
-- Flexible withdrawals (but contributions can't be replaced)
-
-**Best Uses for TFSA:**
-- Long-term savings goals (5+ years)
-- Retirement planning supplement
-- Wealth building through investments
-- Emergency fund (for higher earners)
-
-**Investment Options:**
-- Cash deposits (safe but lower returns)
-- Unit trusts/mutual funds
-- Exchange Traded Funds (ETFs)
-- Shares (for experienced investors)
-
-**Strategies:**
-- Maximize your R36,000 annual allowance
-- Start early (compound interest effect)
-- Choose growth investments for long-term goals
-- Consider automatic monthly debit orders
-- Don't withdraw unless absolutely necessary
-
-**Common Mistakes:**
-- Using it as a short-term savings account
-- Not maximizing the annual allowance
-- Withdrawing funds unnecessarily
-- Choosing overly conservative investments`,
-          type: 'text',
-          duration: '15 minutes',
-          xpReward: 30,
-          completed: false
-        }
-      ]
-    },
-    {
-      id: 'crypto-basics',
-      title: 'Cryptocurrency for South Africans',
-      description: 'Learn about digital currencies and how they can benefit unbanked and underbanked South Africans.',
-      difficulty: 'Intermediate',
-      duration: '60 minutes',
-      category: 'Crypto',
-      thumbnail: '₿',
-      xpReward: 150,
-      completed: false,
-      progress: 0,
-      lessons: [
-        {
-          id: 'lesson-1',
-          title: 'Understanding Cryptocurrency',
-          content: `Cryptocurrency is digital money that can provide financial services to unbanked South Africans and offer alternative investment opportunities.
-
-**What is Cryptocurrency?**
-- Digital currency secured by cryptography
-- Operates on decentralized networks (blockchain)
-- Not controlled by banks or governments
-- Can be sent anywhere in the world 24/7
-
-**Popular Cryptocurrencies:**
-- Bitcoin (BTC) - Digital gold, store of value
-- Ethereum (ETH) - Smart contracts platform
-- Stablecoins (USDC, USDT) - Pegged to US Dollar
-
-**Benefits for South Africans:**
-- Financial inclusion for the unbanked
-- Lower international transfer fees
-- Protection against currency devaluation
-- 24/7 access to financial services
-- Investment opportunities
-
-**Risks to Consider:**
-- High volatility (prices change rapidly)
-- Regulatory uncertainty in SA
-- Technical complexity
-- Security risks if not handled properly
-- Potential for scams
-
-**SA Regulatory Environment:**
-- SARB allows crypto trading
-- Treated as assets for tax purposes
-- Annual foreign investment allowance applies
-- Capital gains tax on profits`,
-          type: 'text',
-          duration: '20 minutes',
-          xpReward: 40,
-          completed: false
-        }
-      ]
-    }
-  ];
-
-  private achievements: Achievement[] = [
-    {
-      id: 'first-lesson',
-      title: 'First Steps',
-      description: 'Complete your first lesson',
-      icon: '🎯',
-      xpReward: 50,
-      requirements: {
-        type: 'lessons_completed',
-        target: 1
-      }
-    },
-    {
-      id: 'course-master',
-      title: 'Course Master',
-      description: 'Complete your first course',
-      icon: '🏆',
-      xpReward: 100,
-      requirements: {
-        type: 'courses_completed',
-        target: 1
-      }
-    },
-    {
-      id: 'quiz-champion',
-      title: 'Quiz Champion',
-      description: 'Get 100% on a quiz',
-      icon: '🧠',
-      xpReward: 75,
-      requirements: {
-        type: 'quiz_perfect',
-        target: 1
-      }
-    },
-    {
-      id: 'dedicated-learner',
-      title: 'Dedicated Learner',
-      description: 'Study for 7 days straight',
-      icon: '🔥',
-      xpReward: 200,
-      requirements: {
-        type: 'streak_days',
-        target: 7
-      }
-    }
-  ];
+    // Load achievements from JSON
+    this.achievements = curriculumData.achievements;
+  }
 
   getCourses(): Course[] {
     return this.courses;
+  }
+
+  getCurriculumInfo() {
+    return curriculumData.curriculum;
+  }
+
+  getDailyTip(): string {
+    const tips = curriculumData.dailyTips;
+    const today = new Date().getDate();
+    return tips[today % tips.length];
+  }
+
+  getGlossary() {
+    return curriculumData.glossary;
   }
 
   getCourse(courseId: string): Course | null {
@@ -504,8 +244,9 @@ class FinancialEducationService {
     // Return courses recommended for the user based on their progress
     const incompleteCourses = this.courses.filter(course => !course.completed);
     
-    // Prioritize beginner courses
+    // Prioritize beginner courses and check prerequisites
     return incompleteCourses
+      .filter(course => this.checkPrerequisites(course))
       .sort((a, b) => {
         if (a.difficulty === 'Beginner' && b.difficulty !== 'Beginner') return -1;
         if (b.difficulty === 'Beginner' && a.difficulty !== 'Beginner') return 1;
@@ -514,22 +255,55 @@ class FinancialEducationService {
       .slice(0, 3);
   }
 
-  getDailyTip(): string {
-    const tips = [
-      "Start your emergency fund with just R50 this month. Small steps lead to big changes!",
-      "Use the envelope method: withdraw cash for discretionary spending to avoid overspending.",
-      "Take advantage of your R36,000 annual TFSA allowance - it's free money from SARS!",
-      "Review your bank statements weekly to catch unauthorized transactions early.",
-      "Consider generic brands at grocery stores - they can save you 20-30% on your shopping bill.",
-      "Set up automatic transfers to savings on payday - pay yourself first!",
-      "Compare insurance quotes annually to ensure you're getting the best rates.",
-      "Use free Wi-Fi when possible to reduce your data costs.",
-      "Cook meals at home more often - it's healthier and much more cost-effective.",
-      "Track your spending for a week to identify where your money really goes."
-    ];
+  private checkPrerequisites(course: Course): boolean {
+    if (!course.prerequisites || course.prerequisites.length === 0) {
+      return true;
+    }
+    
+    return course.prerequisites.every(prereqId => {
+      const prereqCourse = this.getCourse(prereqId);
+      return prereqCourse?.completed || false;
+    });
+  }
 
-    const today = new Date().getDate();
-    return tips[today % tips.length];
+  // Advanced learning analytics
+  getLearningStats(): {
+    totalCourses: number;
+    completedCourses: number;
+    totalLessons: number;
+    completedLessons: number;
+    totalXP: number;
+    currentLevel: number;
+    completionRate: number;
+  } {
+    const totalCourses = this.courses.length;
+    const completedCourses = this.courses.filter(c => c.completed).length;
+    const totalLessons = this.courses.reduce((sum, course) => sum + course.lessons.length, 0);
+    const completedLessons = this.courses.reduce((sum, course) => 
+      sum + course.lessons.filter(l => l.completed).length, 0);
+    
+    return {
+      totalCourses,
+      completedCourses,
+      totalLessons,
+      completedLessons,
+      totalXP: this.getTotalXP(),
+      currentLevel: this.calculateLevel(),
+      completionRate: Math.round((completedCourses / totalCourses) * 100)
+    };
+  }
+
+  // Get personalized learning path
+  getPersonalizedLearningPath(): Course[] {
+    const availableCourses = this.courses.filter(course => 
+      !course.completed && this.checkPrerequisites(course)
+    );
+
+    // Sort by difficulty and relevance
+    return availableCourses.sort((a, b) => {
+      const difficultyOrder = { 'Beginner': 1, 'Intermediate': 2, 'Advanced': 3 };
+      return difficultyOrder[a.difficulty] - difficultyOrder[b.difficulty];
+    });
   }
 }
 

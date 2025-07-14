@@ -20,14 +20,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMobileAuth } from '@/contexts/MobileAuthContext';
 import { useMobileDatabase } from '@/contexts/MobileDatabaseContext';
 import { useCryptoWallet } from '@/contexts/SimpleCryptoWalletContext';
+import { useWallet } from '@/contexts/WalletContext';
 import MoneyTransferHub from '@/components/MoneyTransferHub';
 
 export default function WalletScreen() {
   const { user } = useMobileAuth();
   const { isOnline, syncStatus } = useMobileDatabase();
-  const { 
-    isConnected: isCryptoConnected, 
-    wallet: cryptoWallet, 
+  const {
+    isConnected: isCryptoConnected,
+    wallet: cryptoWallet,
     transactions: cryptoTransactions,
     isLoading: cryptoLoading,
     error: cryptoError,
@@ -36,24 +37,40 @@ export default function WalletScreen() {
     disconnectWallet: disconnectCryptoWallet,
     clearError
   } = useCryptoWallet();
+  const {
+    balance,
+    transactions,
+    topUpWallet,
+    sendMoney,
+    formatCurrency,
+    loading: walletLoading
+  } = useWallet();
   
-  const [balance, setBalance] = useState(2450.75);
   const [showTransferHub, setShowTransferHub] = useState(false);
-  const [recentTransactions, setRecentTransactions] = useState([
-    { id: '1', type: 'credit', amount: 500, description: 'Salary', date: '2025-06-26' },
-    { id: '2', type: 'debit', amount: 45.50, description: 'Groceries', date: '2025-06-26' },
-    { id: '3', type: 'debit', amount: 120, description: 'Electricity', date: '2025-06-25' },
-  ]);
-
-  const formatCurrency = (amount: number): string => {
-    return `R${amount.toLocaleString('en-ZA', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-  };
 
   const handleAddMoney = () => {
-    Alert.alert('Add Money', 'This feature will be available soon with bank integration');
+    Alert.alert(
+      'Add Money',
+      'Choose how you want to add money to your wallet:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Bank Transfer', 
+          onPress: () => Alert.alert('Bank Transfer', 'Bank transfer integration coming soon!')
+        },
+        { 
+          text: 'Card Payment', 
+          onPress: () => Alert.alert('Card Payment', 'Card payment integration coming soon!')
+        },
+        { 
+          text: 'Demo +R100', 
+          onPress: () => {
+            topUpWallet(100);
+            Alert.alert('Success', 'R100 added to your wallet (Demo mode)');
+          }
+        },
+      ]
+    );
   };
 
   const handleSendMoney = () => {
@@ -220,7 +237,7 @@ export default function WalletScreen() {
         {/* Recent Transactions */}
         <View style={styles.transactionsContainer}>
           <Text style={styles.sectionTitle}>Recent Transactions</Text>
-          {recentTransactions.map((transaction) => (
+          {transactions.slice(0, 5).map((transaction) => (
             <View key={transaction.id} style={styles.transactionItem}>
               <View style={styles.transactionLeft}>
                 <View style={[

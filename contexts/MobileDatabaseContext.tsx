@@ -79,6 +79,16 @@ interface SyncQueueItem {
   error?: string;
 }
 
+// Category with budget information
+interface CategoryWithBudget {
+  name: string;
+  budget?: number;
+  spent: number;
+  color: string;
+  icon: string;
+  description?: string;
+}
+
 interface MobileDatabaseContextType {
   // Connection status
   isOnline: boolean;
@@ -97,6 +107,7 @@ interface MobileDatabaseContextType {
   addExpense: (expense: Omit<Expense, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'syncStatus'>) => Promise<void>;
   updateExpense: (id: number, updates: Partial<Expense>) => Promise<void>;
   deleteExpense: (id: number) => Promise<void>;
+  scanReceiptAndAddExpense: (imageUri: string) => Promise<void>;
   getExpensesByCategory: (category: string) => Expense[];
   getExpensesByDateRange: (startDate: string, endDate: string) => Expense[];
   
@@ -107,7 +118,10 @@ interface MobileDatabaseContextType {
   deleteReceipt: (id: number) => Promise<void>;
   
   // Categories
+  categories: CategoryWithBudget[];
   getCategories: () => string[];
+  getCategoriesWithBudgets: () => CategoryWithBudget[];
+  updateCategoryBudget: (categoryName: string, budget: number) => Promise<void>;
   getCategoryTotals: (startDate?: string, endDate?: string) => { [category: string]: number };
   
   // Sync management
@@ -140,6 +154,7 @@ export function MobileDatabaseProvider({ children }: MobileDatabaseProviderProps
   const [currentUser, setCurrentUser] = useState<LocalUser | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [categories, setCategories] = useState<CategoryWithBudget[]>([]);
   const [isOnline, setIsOnline] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | undefined>();
@@ -235,6 +250,20 @@ export function MobileDatabaseProvider({ children }: MobileDatabaseProviderProps
           FOREIGN KEY (userId) REFERENCES users (id)
         );
         
+        CREATE TABLE IF NOT EXISTS categories (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          userId TEXT NOT NULL,
+          name TEXT NOT NULL,
+          budget REAL DEFAULT 0,
+          color TEXT NOT NULL,
+          icon TEXT NOT NULL,
+          description TEXT,
+          createdAt TEXT NOT NULL,
+          updatedAt TEXT NOT NULL,
+          UNIQUE(userId, name),
+          FOREIGN KEY (userId) REFERENCES users (id)
+        );
+        
         CREATE TABLE IF NOT EXISTS sync_queue (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           table_name TEXT NOT NULL,
@@ -298,8 +327,69 @@ export function MobileDatabaseProvider({ children }: MobileDatabaseProviderProps
       );
       setReceipts(userReceipts as Receipt[]);
       
+      // Load categories for user
+      await loadUserCategories(userId);
+      
     } catch (error) {
       console.error('Error loading user data:', error);
+    }
+  };
+
+  const loadUserCategories = async (userId: string) => {
+    if (!db) return;
+    
+    try {
+      // Check if user has any categories
+      const existingCategories = await db.getAllAsync(
+        'SELECT * FROM categories WHERE userId = ?',
+        [userId]
+      );
+      
+      if (existingCategories.length === 0) {
+        // Initialize default categories
+        await initializeDefaultCategories(userId);
+      }
+      
+      // Load all categories with calculated spent amounts
+      const categoriesData = await db.getAllAsync(
+        `SELECT c.*, COALESCE(SUM(e.amount), 0) as spent 
+         FROM categories c 
+         LEFT JOIN expenses e ON c.name = e.category AND c.userId = e.userId 
+         WHERE c.userId = ? 
+         GROUP BY c.id 
+         ORDER BY c.name`,
+        [userId]
+      );
+      
+      setCategories(categoriesData as CategoryWithBudget[]);
+      
+    } catch (error) {
+      console.error('Error loading categories:', error);
+    }
+  };
+
+  const initializeDefaultCategories = async (userId: string) => {
+    if (!db) return;
+    
+    const defaultCategories = [
+      { name: 'Food & Dining', color: '#EF4444', icon: 'restaurant-outline', description: 'Restaurants, groceries, and food delivery' },
+      { name: 'Transportation', color: '#3B82F6', icon: 'car-outline', description: 'Fuel, public transport, and ride-sharing' },
+      { name: 'Shopping', color: '#8B5CF6', icon: 'bag-outline', description: 'Clothing, electronics, and retail purchases' },
+      { name: 'Entertainment', color: '#EC4899', icon: 'game-controller-outline', description: 'Movies, games, and recreational activities' },
+      { name: 'Bills & Utilities', color: '#F59E0B', icon: 'receipt-outline', description: 'Electricity, water, internet, and subscriptions' },
+      { name: 'Healthcare', color: '#10B981', icon: 'medical-outline', description: 'Medical expenses, pharmacy, and insurance' },
+      { name: 'Education', color: '#0EA5E9', icon: 'school-outline', description: 'Books, courses, and educational materials' },
+      { name: 'Other', color: '#64748B', icon: 'ellipsis-horizontal-outline', description: 'Miscellaneous expenses' }
+    ];
+    
+    const now = new Date().toISOString();
+    
+    for (const category of defaultCategories) {
+      await db.runAsync(
+        `INSERT INTO categories (userId, name, budget, color, icon, description, createdAt, updatedAt) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [userId, category.name, 0, category.color, category.icon, category.description, now, now]
+      );
     }
   };
 
@@ -860,6 +950,73 @@ export function MobileDatabaseProvider({ children }: MobileDatabaseProviderProps
     }
   };
 
+  const scanReceiptAndAddExpense = async (imageUri: string) => {
+    if (!currentUser) return;
+    
+    try {
+      // This is a placeholder for OCR functionality
+      // In a real implementation, you would use an OCR service to extract data
+      
+      // For now, we'll create a mock receipt processing
+      const mockReceiptData = {
+        merchant: 'Scanned Merchant',
+        amount: 0,
+        category: 'Other',
+        date: new Date().toISOString().slice(0, 10),
+        description: 'Scanned from receipt'
+      };
+      
+      // Add the receipt to receipts table
+      await addReceipt({
+        imageUri,
+        merchantName: mockReceiptData.merchant,
+        amount: mockReceiptData.amount,
+        date: mockReceiptData.date,
+        items: JSON.stringify([]),
+        category: mockReceiptData.category,
+        processed: false,
+        ocrConfidence: 0
+      });
+      
+      // Add the expense
+      await addExpense({
+        amount: mockReceiptData.amount,
+        category: mockReceiptData.category,
+        merchant: mockReceiptData.merchant,
+        description: mockReceiptData.description,
+        date: mockReceiptData.date,
+        receiptUrl: imageUri,
+        isRecurring: false
+      });
+      
+    } catch (error) {
+      console.error('Error scanning receipt and adding expense:', error);
+      throw error;
+    }
+  };
+
+  const getCategoriesWithBudgets = (): CategoryWithBudget[] => {
+    return categories;
+  };
+
+  const updateCategoryBudget = async (categoryName: string, budget: number) => {
+    if (!db || !currentUser) return;
+    
+    try {
+      await db.runAsync(
+        'UPDATE categories SET budget = ?, updatedAt = ? WHERE userId = ? AND name = ?',
+        [budget, new Date().toISOString(), currentUser.id, categoryName]
+      );
+      
+      // Reload categories to update state
+      await loadUserCategories(currentUser.id);
+      
+    } catch (error) {
+      console.error('Error updating category budget:', error);
+      throw error;
+    }
+  };
+
   const value: MobileDatabaseContextType = {
     isOnline,
     isSyncing,
@@ -873,13 +1030,17 @@ export function MobileDatabaseProvider({ children }: MobileDatabaseProviderProps
     addExpense,
     updateExpense,
     deleteExpense,
+    scanReceiptAndAddExpense,
     getExpensesByCategory,
     getExpensesByDateRange,
     receipts,
     addReceipt,
     updateReceipt,
     deleteReceipt,
+    categories,
     getCategories,
+    getCategoriesWithBudgets,
+    updateCategoryBudget,
     getCategoryTotals,
     forceSyncNow,
     clearSyncQueue,

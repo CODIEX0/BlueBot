@@ -6,13 +6,13 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import SimpleFinancialEducation from '../components/SimpleFinancialEducation';
+import EnhancedFinancialEducation from '../components/EnhancedFinancialEducation';
 
 export default function FinancialEducationPage() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <SimpleFinancialEducation />
+        <EnhancedFinancialEducation />
       </View>
     </SafeAreaView>
   );

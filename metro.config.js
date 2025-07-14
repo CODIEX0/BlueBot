@@ -6,7 +6,6 @@ const config = getDefaultConfig(__dirname);
 // Ensure we can resolve all SVG and crypto modules properly
 config.resolver.alias = {
   ...config.resolver.alias,
-  'fbjs/lib/invariant': path.resolve(__dirname, 'polyfills/fbjs-invariant.js'),
   'fbjs/lib/ExecutionEnvironment': require.resolve('fbjs/lib/ExecutionEnvironment'),
   'react-native-svg': path.resolve(__dirname, 'node_modules/react-native-svg'),
   'crypto': require.resolve('crypto-browserify'),

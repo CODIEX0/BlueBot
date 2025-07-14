@@ -9,7 +9,6 @@ module.exports = async function (env, argv) {
     ...config.resolve.alias,
     'react-native-svg': path.resolve(__dirname, 'node_modules/react-native-svg'),
     'fbjs': path.resolve(__dirname, 'node_modules/fbjs'),
-    'fbjs/lib/invariant': path.resolve(__dirname, 'node_modules/fbjs/lib/invariant.js'),
     'fbjs/lib/ExecutionEnvironment': path.resolve(__dirname, 'node_modules/fbjs/lib/ExecutionEnvironment.js'),
     // Ensure assets folder in react-navigation elements resolves
     '@react-navigation/elements/lib/module/assets': path.resolve(__dirname, 'node_modules/@react-navigation/elements/lib/module/assets'),

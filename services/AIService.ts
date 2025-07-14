@@ -267,7 +267,11 @@ export class AIService {
       }));
 
     // Risk alerts
-    const riskAlerts = [];
+    const riskAlerts: {
+      type: 'overspending' | 'unusual_transaction' | 'budget_exceeded';
+      message: string;
+      severity: 'low' | 'medium' | 'high';
+    }[] = [];
     if (totalSpent > income * 0.9) {
       riskAlerts.push({
         type: 'overspending' as const,

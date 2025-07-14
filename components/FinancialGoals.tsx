@@ -119,30 +119,39 @@ export default function FinancialGoals() {
   };
 
   const handleAddContribution = (goalId: string) => {
-    Alert.prompt(
-      'Add Contribution',
-      'How much would you like to add to this goal?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Add',
-          onPress: (amount) => {
-            if (amount && !isNaN(parseFloat(amount))) {
-              const updatedGoals = goals.map(goal => 
-                goal.id === goalId 
-                  ? { ...goal, currentAmount: goal.currentAmount + parseFloat(amount) }
-                  : goal
-              );
-              setGoals(updatedGoals);
-              Alert.alert('Success', `R${amount} added to your goal!`);
+    if (Alert.prompt) {
+      Alert.prompt(
+        'Add Contribution',
+        'How much would you like to add to this goal?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Add',
+            onPress: (amount) => {
+              if (amount && !isNaN(parseFloat(amount))) {
+                const updatedGoals = goals.map(goal => 
+                  goal.id === goalId 
+                    ? { ...goal, currentAmount: goal.currentAmount + parseFloat(amount) }
+                    : goal
+                );
+                setGoals(updatedGoals);
+                Alert.alert('Success', `R${amount} added to your goal!`);
+              }
             }
           }
-        }
-      ],
-      'plain-text',
-      '',
-      'numeric'
-    );
+        ],
+        'plain-text',
+        '',
+        'numeric'
+      );
+    } else {
+      // Fallback for platforms that don't support Alert.prompt
+      Alert.alert(
+        'Add Contribution',
+        'This feature requires a text input dialog which is not available on this platform.',
+        [{ text: 'OK' }]
+      );
+    }
   };
 
   const formatCurrency = (amount: number) => {
