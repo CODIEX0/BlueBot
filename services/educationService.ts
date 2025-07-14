@@ -94,7 +94,17 @@ class FinancialEducationService {
     }));
 
     // Load achievements from JSON
-    this.achievements = curriculumData.achievements;
+    this.achievements = curriculumData.achievements.map(achievement => ({
+      id: achievement.id,
+      title: achievement.title,
+      description: achievement.description,
+      icon: achievement.badgeIcon,
+      xpReward: achievement.xpRequired,
+      requirements: {
+        type: 'xp_earned' as const,
+        target: achievement.xpRequired
+      }
+    }));
   }
 
   getCourses(): Course[] {
@@ -102,17 +112,25 @@ class FinancialEducationService {
   }
 
   getCurriculumInfo() {
-    return curriculumData.curriculum;
+    return curriculumData.meta;
   }
 
   getDailyTip(): string {
-    const tips = curriculumData.dailyTips;
+    const tips = (curriculumData as any).dailyTips || [
+      "Start tracking your expenses today to understand where your money goes.",
+      "Set aside at least 10% of your income for emergency savings.",
+      "Compare prices before making major purchases to save money.",
+      "Review your bank statements monthly to catch any errors or fraud.",
+      "Pay off high-interest debt first to save money on interest charges.",
+      "Consider investing in low-cost index funds for long-term growth.",
+      "Create a budget and stick to it to achieve your financial goals."
+    ];
     const today = new Date().getDate();
     return tips[today % tips.length];
   }
 
   getGlossary() {
-    return curriculumData.glossary;
+    return (curriculumData as any).glossary || {};
   }
 
   getCourse(courseId: string): Course | null {

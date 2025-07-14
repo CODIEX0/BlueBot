@@ -15,6 +15,7 @@ import {
   SafeAreaView,
   Alert,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,6 +33,24 @@ interface QuizQuestion {
   options: string[];
   correctAnswer: number;
   explanation: string;
+}
+
+interface QuizState {
+  currentQuestionIndex: number;
+  selectedAnswers: number[];
+  showResult: boolean;
+  score: number;
+  passed: boolean;
+  timeRemaining: number;
+  startTime: Date;
+}
+
+interface SkillProgress {
+  budgeting: number;
+  investing: number;
+  taxPlanning: number;
+  riskManagement: number;
+  businessFinance: number;
 }
 
 const DIFFICULTY_COLORS = {
@@ -58,6 +77,7 @@ export default function CurriculumBasedEducation() {
   const [showCourseModal, setShowCourseModal] = useState(false);
   const [showLessonModal, setShowLessonModal] = useState(false);
   const [showPathModal, setShowPathModal] = useState(false);
+  const [showQuizModal, setShowQuizModal] = useState(false);
   const [curriculum, setCurriculum] = useState<CurriculumData | null>(null);
   const [loading, setLoading] = useState(true);
   const [userProgress, setUserProgress] = useState<UserProgress>({
@@ -68,8 +88,158 @@ export default function CurriculumBasedEducation() {
     achievements: [],
     lastActive: new Date().toISOString()
   });
+  const [quizState, setQuizState] = useState<QuizState>({
+    currentQuestionIndex: 0,
+    selectedAnswers: [],
+    showResult: false,
+    score: 0,
+    passed: false,
+    timeRemaining: 0,
+    startTime: new Date(),
+  });
+  const [selectedQuiz, setSelectedQuiz] = useState<Quiz | null>(null);
+  const [studyStreak, setStudyStreak] = useState(0);
+  const [skillProgress, setSkillProgress] = useState<SkillProgress>({
+    budgeting: 0,
+    investing: 0,
+    taxPlanning: 0,
+    riskManagement: 0,
+    businessFinance: 0,
+  });
+  const [showInteractiveTools, setShowInteractiveTools] = useState(false);
+  const [calculatorValues, setCalculatorValues] = useState({
+    income: '',
+    expenses: '',
+    principal: '',
+    rate: '',
+    time: '',
+    monthlyContribution: ''
+  });
+  
+  // Interactive Learning States
+  const [calculatorVisible, setCalculatorVisible] = useState(false);
+  const [calculatorType, setCalculatorType] = useState<'budget' | 'compound_interest' | null>(null);
+  const [scenarioMode, setScenarioMode] = useState<string | null>(null);
 
   const { addPoints, unlockAchievement, updateStats } = useGamification();
+
+  // Interactive Calculator Components
+  const renderBudgetCalculator = () => (
+    <View style={styles.calculatorContainer}>
+      <Text style={styles.calculatorTitle}>Budget Calculator</Text>
+      <Text style={styles.calculatorDescription}>
+        Use the 50/30/20 rule: 50% needs, 30% wants, 20% savings
+      </Text>
+      
+      <View style={styles.inputContainer}>
+        <Text style={styles.inputLabel}>Monthly After-Tax Income (R)</Text>
+        <TextInput
+          style={styles.calculatorInput}
+          value={calculatorValues.income}
+          onChangeText={(text) => setCalculatorValues(prev => ({...prev, income: text}))}
+          placeholder="Enter your monthly income"
+          keyboardType="numeric"
+        />
+      </View>
+      
+      {calculatorValues.income && (
+        <View style={styles.calculatorResults}>
+          <View style={styles.resultRow}>
+            <Text style={styles.resultLabel}>Needs (50%):</Text>
+            <Text style={styles.resultValue}>R{(parseFloat(calculatorValues.income) * 0.5).toFixed(2)}</Text>
+          </View>
+          <View style={styles.resultRow}>
+            <Text style={styles.resultLabel}>Wants (30%):</Text>
+            <Text style={styles.resultValue}>R{(parseFloat(calculatorValues.income) * 0.3).toFixed(2)}</Text>
+          </View>
+          <View style={styles.resultRow}>
+            <Text style={styles.resultLabel}>Savings (20%):</Text>
+            <Text style={styles.resultValue}>R{(parseFloat(calculatorValues.income) * 0.2).toFixed(2)}</Text>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+
+  const renderCompoundInterestCalculator = () => {
+    const calculateCompoundInterest = () => {
+      const principal = parseFloat(calculatorValues.principal) || 0;
+      const rate = parseFloat(calculatorValues.rate) / 100 || 0;
+      const time = parseFloat(calculatorValues.time) || 0;
+      const monthlyContrib = parseFloat(calculatorValues.monthlyContribution) || 0;
+      
+      const futureValue = principal * Math.pow(1 + rate, time);
+      const monthlyRate = rate / 12;
+      const months = time * 12;
+      const annuityValue = monthlyContrib * (Math.pow(1 + monthlyRate, months) - 1) / monthlyRate;
+      
+      return futureValue + annuityValue;
+    };
+
+    return (
+      <View style={styles.calculatorContainer}>
+        <Text style={styles.calculatorTitle}>Compound Interest Calculator</Text>
+        <Text style={styles.calculatorDescription}>
+          See how your money can grow over time with compound interest
+        </Text>
+        
+        <View style={styles.inputContainer}>
+          <Text style={styles.inputLabel}>Initial Investment (R)</Text>
+          <TextInput
+            style={styles.calculatorInput}
+            value={calculatorValues.principal}
+            onChangeText={(text) => setCalculatorValues(prev => ({...prev, principal: text}))}
+            placeholder="Initial amount"
+            keyboardType="numeric"
+          />
+        </View>
+
+        <View style={styles.inputContainer}>
+          <Text style={styles.inputLabel}>Annual Interest Rate (%)</Text>
+          <TextInput
+            style={styles.calculatorInput}
+            value={calculatorValues.rate}
+            onChangeText={(text) => setCalculatorValues(prev => ({...prev, rate: text}))}
+            placeholder="Annual interest rate"
+            keyboardType="numeric"
+          />
+        </View>
+
+        <View style={styles.inputContainer}>
+          <Text style={styles.inputLabel}>Time Period (Years)</Text>
+          <TextInput
+            style={styles.calculatorInput}
+            value={calculatorValues.time}
+            onChangeText={(text) => setCalculatorValues(prev => ({...prev, time: text}))}
+            placeholder="Number of years"
+            keyboardType="numeric"
+          />
+        </View>
+
+        <View style={styles.inputContainer}>
+          <Text style={styles.inputLabel}>Monthly Contribution (R)</Text>
+          <TextInput
+            style={styles.calculatorInput}
+            value={calculatorValues.monthlyContribution}
+            onChangeText={(text) => setCalculatorValues(prev => ({...prev, monthlyContribution: text}))}
+            placeholder="Monthly contribution"
+            keyboardType="numeric"
+          />
+        </View>
+        
+        {calculatorValues.principal && calculatorValues.rate && calculatorValues.time && (
+          <View style={styles.calculatorResults}>
+            <View style={styles.resultRow}>
+              <Text style={styles.resultLabel}>Future Value:</Text>
+              <Text style={[styles.resultValue, styles.highlightedResult]}>
+                R{calculateCompoundInterest().toFixed(2)}
+              </Text>
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  };
 
   useEffect(() => {
     loadCurriculum();
@@ -78,15 +248,609 @@ export default function CurriculumBasedEducation() {
   const loadCurriculum = async () => {
     try {
       setLoading(true);
-      const curriculumData = await curriculumService.loadCurriculum();
-      const userProgressData = await curriculumService.loadUserProgress();
       
-      setCurriculum(curriculumData);
-      setUserProgress(userProgressData);
+      // Create interactive learning curriculum with real financial concepts
+      const interactiveCurriculum = createInteractiveCurriculum();
+      const storedProgress = await loadStoredProgress();
+      
+      setCurriculum(interactiveCurriculum);
+      setUserProgress(storedProgress);
       setLoading(false);
     } catch (error) {
       console.error('Error loading curriculum:', error);
       setLoading(false);
+    }
+  };
+
+  const createInteractiveCurriculum = (): CurriculumData => {
+    return {
+      meta: {
+        title: "BlueBot Financial Mastery Academy",
+        description: "Interactive financial education for South African learners",
+        version: "1.0.0",
+        totalCourses: 6,
+        estimatedCompletionTime: "12-16 weeks",
+        certificationLevel: "Financial Literacy Certificate",
+        accreditation: "BlueBot Academy",
+        languages: ["English"],
+        targetAudience: "Young Adults, Professionals, Students",
+        qualityRating: "5 Stars",
+        recognitions: ["Interactive Learning", "Practical Application"]
+      },
+      courses: [
+        {
+          id: "budgeting-basics",
+          title: "Smart Budgeting & Money Management",
+          description: "Learn to create and maintain a budget that works for your South African lifestyle",
+          difficulty: "Beginner",
+          duration: "2-3 hours",
+          category: "Core Skills",
+          thumbnail: "💰",
+          xpReward: 150,
+          prerequisites: [],
+          accreditation: "BlueBot Academy",
+          learningOutcomes: [
+            "Create a personal budget using the 50/30/20 rule",
+            "Track expenses effectively using digital tools",
+            "Understand South African tax implications",
+            "Set up emergency fund goals"
+          ],
+          lessons: [
+            {
+              id: "budget-intro",
+              title: "Introduction to Budgeting",
+              type: "interactive",
+              duration: "30 min",
+              xpReward: 50,
+              content: {
+                introduction: "Budgeting is the foundation of financial success. Let's explore how to create a budget that works for your South African income and expenses.",
+                keyPoints: [
+                  "Income vs Expenses - understanding the basics",
+                  "Fixed vs Variable costs in SA context",
+                  "The 50/30/20 budgeting rule explained",
+                  "Digital tools for budget tracking"
+                ],
+                saSpecificFactors: [
+                  "Understanding South African salary structures",
+                  "Tax implications and deductions",
+                  "Common SA living expenses to consider",
+                  "Local banking and payment systems"
+                ],
+                interactiveElements: {
+                  calculator: "budget",
+                  scenarios: ["student", "working_professional", "family"]
+                }
+              },
+              quiz: {
+                questions: [
+                  {
+                    id: "q1",
+                    question: "What percentage of income should go to needs according to the 50/30/20 rule?",
+                    options: ["30%", "50%", "20%", "70%"],
+                    correctAnswer: 1,
+                    explanation: "The 50/30/20 rule allocates 50% for needs, 30% for wants, and 20% for savings and debt repayment."
+                  },
+                  {
+                    id: "q2",
+                    question: "Which is considered a 'need' in budgeting?",
+                    options: ["Dining out", "Rent/mortgage", "Entertainment", "Gym membership"],
+                    correctAnswer: 1,
+                    explanation: "Rent or mortgage payments are essential housing costs and considered needs in any budget."
+                  }
+                ],
+                passingScore: 70
+              }
+            }
+          ]
+        },
+        {
+          id: "investing-101",
+          title: "Investment Fundamentals for SA",
+          description: "Understand investment options available to South Africans",
+          difficulty: "Intermediate",
+          duration: "3-4 hours",
+          category: "Investing",
+          thumbnail: "📈",
+          xpReward: 200,
+          prerequisites: ["budgeting-basics"],
+          accreditation: "BlueBot Academy",
+          learningOutcomes: [
+            "Understand different investment vehicles in SA",
+            "Learn about JSE and international markets",
+            "Calculate compound interest and returns",
+            "Create a basic investment strategy"
+          ],
+          lessons: [
+            {
+              id: "investment-basics",
+              title: "Investment Fundamentals",
+              type: "interactive",
+              duration: "45 min",
+              xpReward: 75,
+              content: {
+                introduction: "Investing is crucial for building wealth over time. Learn about the investment landscape in South Africa.",
+                keyPoints: [
+                  "Risk vs Return relationship",
+                  "Compound interest power",
+                  "Asset classes: Stocks, Bonds, Property, Cash",
+                  "Investment timeline considerations"
+                ],
+                saSpecificFactors: [
+                  "JSE (Johannesburg Stock Exchange) basics",
+                  "Tax-free savings accounts (TFSA)",
+                  "Retirement annuities (RA) benefits",
+                  "Unit trusts and ETFs in SA"
+                ],
+                interactiveElements: {
+                  calculator: "compound_interest",
+                  simulator: "investment_growth",
+                  scenarios: ["conservative", "moderate", "aggressive"]
+                }
+              },
+              quiz: {
+                questions: [
+                  {
+                    id: "q1",
+                    question: "What is the annual TFSA contribution limit in South Africa (2024)?",
+                    options: ["R30,000", "R36,000", "R40,000", "R50,000"],
+                    correctAnswer: 1,
+                    explanation: "The Tax-Free Savings Account annual contribution limit is R36,000 with a lifetime limit of R500,000."
+                  },
+                  {
+                    id: "q2",
+                    question: "Which of these is considered a low-risk investment?",
+                    options: ["Individual stocks", "Government bonds", "Cryptocurrency", "Forex trading"],
+                    correctAnswer: 1,
+                    explanation: "Government bonds are considered low-risk investments as they're backed by the government."
+                  }
+                ],
+                passingScore: 70
+              }
+            },
+            {
+              id: "compound-interest",
+              title: "The Power of Compound Interest",
+              type: "interactive",
+              duration: "30 min",
+              xpReward: 60,
+              content: {
+                introduction: "Understand how compound interest can work for you to build wealth over time.",
+                keyPoints: [
+                  "Simple vs Compound interest explained",
+                  "Time horizon impact on returns",
+                  "Regular contributions effect",
+                  "Real-world examples and calculations"
+                ],
+                saSpecificFactors: [
+                  "South African inflation rates consideration",
+                  "Tax implications on investment returns",
+                  "Local investment account options",
+                  "Currency impact on international investments"
+                ],
+                interactiveElements: {
+                  calculator: "compound_calculator",
+                  scenarios: ["early_starter", "late_starter", "regular_saver"]
+                }
+              },
+              quiz: {
+                questions: [
+                  {
+                    id: "q1",
+                    question: "If you invest R1000 at 10% annual interest compounded annually, how much will you have after 2 years?",
+                    options: ["R1200", "R1210", "R1100", "R1300"],
+                    correctAnswer: 1,
+                    explanation: "Year 1: R1000 × 1.10 = R1100. Year 2: R1100 × 1.10 = R1210. This demonstrates compound interest."
+                  }
+                ],
+                passingScore: 70
+              }
+            }
+          ]
+        },
+        {
+          id: "debt-management",
+          title: "Debt Management & Credit Health",
+          description: "Learn how to manage debt effectively and build good credit",
+          difficulty: "Intermediate",
+          duration: "2-3 hours",
+          category: "Core Skills",
+          thumbnail: "💳",
+          xpReward: 180,
+          prerequisites: ["budgeting-basics"],
+          accreditation: "BlueBot Academy",
+          learningOutcomes: [
+            "Understand different types of debt",
+            "Learn debt repayment strategies",
+            "Build and maintain good credit score",
+            "Avoid debt traps and predatory lending"
+          ],
+          lessons: [
+            {
+              id: "debt-types",
+              title: "Understanding Different Types of Debt",
+              type: "interactive",
+              duration: "40 min",
+              xpReward: 70,
+              content: {
+                introduction: "Not all debt is created equal. Learn to distinguish between good and bad debt and manage them effectively.",
+                keyPoints: [
+                  "Good debt vs Bad debt",
+                  "Interest rates and payment terms",
+                  "Debt-to-income ratios",
+                  "Debt consolidation options"
+                ],
+                saSpecificFactors: [
+                  "South African credit bureau system",
+                  "National Credit Act protections",
+                  "Common SA debt products (store cards, personal loans)",
+                  "Debt counselling services available"
+                ],
+                interactiveElements: {
+                  calculator: "debt_payoff",
+                  scenarios: ["credit_card_debt", "student_loan", "home_loan"]
+                }
+              },
+              quiz: {
+                questions: [
+                  {
+                    id: "q1",
+                    question: "Which is generally considered 'good debt'?",
+                    options: ["Credit card debt", "Home mortgage", "Store card debt", "Payday loan"],
+                    correctAnswer: 1,
+                    explanation: "A home mortgage is considered good debt because it helps you build equity in an appreciating asset."
+                  },
+                  {
+                    id: "q2",
+                    question: "What is a healthy debt-to-income ratio?",
+                    options: ["Below 20%", "Below 36%", "Below 50%", "Below 60%"],
+                    correctAnswer: 1,
+                    explanation: "Financial experts recommend keeping your total debt-to-income ratio below 36% for optimal financial health."
+                  }
+                ],
+                passingScore: 70
+              }
+            }
+          ]
+        },
+        {
+          id: "retirement-planning",
+          title: "Retirement Planning for South Africans",
+          description: "Plan for a comfortable retirement using SA-specific retirement vehicles",
+          difficulty: "Advanced",
+          duration: "4-5 hours",
+          category: "Retirement",
+          thumbnail: "🏖️",
+          xpReward: 250,
+          prerequisites: ["budgeting-basics", "investing-101"],
+          accreditation: "BlueBot Academy",
+          learningOutcomes: [
+            "Understand SA retirement fund system",
+            "Calculate retirement needs",
+            "Optimize retirement contributions",
+            "Plan for retirement income strategies"
+          ],
+          lessons: [
+            {
+              id: "retirement-basics",
+              title: "Retirement Planning Basics",
+              type: "interactive",
+              duration: "50 min",
+              xpReward: 85,
+              content: {
+                introduction: "Start planning for retirement early to leverage the power of compound growth and ensure financial security.",
+                keyPoints: [
+                  "Retirement planning timeline",
+                  "Calculating retirement needs",
+                  "Inflation impact on retirement",
+                  "Healthcare costs in retirement"
+                ],
+                saSpecificFactors: [
+                  "Government Employee Pension Fund (GEPF)",
+                  "Retirement annuity tax benefits",
+                  "Preservation funds options",
+                  "Living annuity vs life annuity choices"
+                ],
+                interactiveElements: {
+                  calculator: "retirement_needs",
+                  scenarios: ["early_retirement", "normal_retirement", "delayed_retirement"]
+                }
+              },
+              quiz: {
+                questions: [
+                  {
+                    id: "q1",
+                    question: "What percentage of pre-retirement income do financial planners recommend for retirement?",
+                    options: ["50-60%", "70-80%", "90-100%", "40-50%"],
+                    correctAnswer: 1,
+                    explanation: "Most financial planners recommend replacing 70-80% of pre-retirement income to maintain your lifestyle."
+                  }
+                ],
+                passingScore: 70
+              }
+            }
+          ]
+        },
+        {
+          id: "tax-planning",
+          title: "South African Tax Planning",
+          description: "Understand SA tax system and optimize your tax obligations",
+          difficulty: "Advanced",
+          duration: "3-4 hours",
+          category: "Tax Planning",
+          thumbnail: "📊",
+          xpReward: 220,
+          prerequisites: ["budgeting-basics"],
+          accreditation: "BlueBot Academy",
+          learningOutcomes: [
+            "Understand SA personal income tax",
+            "Learn about tax deductions and rebates",
+            "Plan for capital gains tax",
+            "Optimize tax-efficient investments"
+          ],
+          lessons: [
+            {
+              id: "income-tax-basics",
+              title: "Personal Income Tax in SA",
+              type: "interactive",
+              duration: "45 min",
+              xpReward: 80,
+              content: {
+                introduction: "Navigate the South African tax system effectively and ensure you're paying the right amount of tax.",
+                keyPoints: [
+                  "Progressive tax system explained",
+                  "Tax brackets and rates",
+                  "PAYE vs provisional tax",
+                  "Tax return filing requirements"
+                ],
+                saSpecificFactors: [
+                  "SARS eFiling system",
+                  "Medical aid tax credits",
+                  "Retirement annuity tax deductions",
+                  "Tax-free savings account benefits"
+                ],
+                interactiveElements: {
+                  calculator: "tax_calculator",
+                  scenarios: ["employee", "freelancer", "business_owner"]
+                }
+              },
+              quiz: {
+                questions: [
+                  {
+                    id: "q1",
+                    question: "What is the highest marginal tax rate in South Africa (2024)?",
+                    options: ["39%", "41%", "45%", "47%"],
+                    correctAnswer: 2,
+                    explanation: "The highest marginal tax rate in South Africa is 45% for income above R1,817,850."
+                  }
+                ],
+                passingScore: 70
+              }
+            }
+          ]
+        },
+        {
+          id: "emergency-fund",
+          title: "Building Your Emergency Fund",
+          description: "Create a financial safety net for unexpected expenses",
+          difficulty: "Beginner",
+          duration: "1-2 hours",
+          category: "Core Skills",
+          thumbnail: "🛡️",
+          xpReward: 120,
+          prerequisites: [],
+          accreditation: "BlueBot Academy",
+          learningOutcomes: [
+            "Determine emergency fund size needed",
+            "Choose the right savings vehicle",
+            "Build emergency fund systematically",
+            "Know when to use emergency funds"
+          ],
+          lessons: [
+            {
+              id: "emergency-fund-basics",
+              title: "Emergency Fund Essentials",
+              type: "interactive",
+              duration: "35 min",
+              xpReward: 65,
+              content: {
+                introduction: "An emergency fund is your financial safety net. Learn how to build and maintain one effectively.",
+                keyPoints: [
+                  "3-6 months expenses rule",
+                  "Emergency vs opportunity funds",
+                  "Liquid vs illiquid savings",
+                  "Automated savings strategies"
+                ],
+                saSpecificFactors: [
+                  "High-yield savings accounts in SA",
+                  "Money market accounts options",
+                  "32-day notice accounts benefits",
+                  "Bank failures and deposit insurance"
+                ],
+                interactiveElements: {
+                  calculator: "emergency_fund_target",
+                  scenarios: ["single_income", "dual_income", "freelancer"]
+                }
+              },
+              quiz: {
+                questions: [
+                  {
+                    id: "q1",
+                    question: "How many months of expenses should an emergency fund typically cover?",
+                    options: ["1-2 months", "3-6 months", "6-12 months", "12+ months"],
+                    correctAnswer: 1,
+                    explanation: "Most financial experts recommend having 3-6 months of living expenses saved for emergencies."
+                  }
+                ],
+                passingScore: 70
+              }
+            }
+          ]
+        }
+      ],
+      learningPaths: [
+        {
+          id: "beginner-path",
+          title: "Financial Literacy Foundation",
+          description: "Start your financial journey with essential skills",
+          difficulty: "Beginner",
+          estimatedTime: "4-6 weeks",
+          courses: ["budgeting-basics", "emergency-fund"],
+          outcomes: ["Budget creation", "Emergency fund setup", "Basic financial planning"]
+        },
+        {
+          id: "investment-path",
+          title: "Investment Mastery Track",
+          description: "Build wealth through smart investing strategies",
+          difficulty: "Intermediate",
+          estimatedTime: "6-8 weeks",
+          courses: ["budgeting-basics", "investing-101", "retirement-planning"],
+          outcomes: ["Investment strategy", "Portfolio management", "Retirement planning"]
+        },
+        {
+          id: "debt-freedom-path",
+          title: "Debt Freedom Journey",
+          description: "Master debt management and achieve financial freedom",
+          difficulty: "Intermediate",
+          estimatedTime: "4-6 weeks",
+          courses: ["budgeting-basics", "debt-management", "emergency-fund"],
+          outcomes: ["Debt elimination", "Credit score improvement", "Financial resilience"]
+        },
+        {
+          id: "tax-optimization-path",
+          title: "Tax Optimization Expert",
+          description: "Master South African tax system for maximum savings",
+          difficulty: "Advanced",
+          estimatedTime: "3-4 weeks",
+          courses: ["budgeting-basics", "investing-101", "tax-planning"],
+          outcomes: ["Tax efficiency", "Legal tax minimization", "Investment optimization"]
+        },
+        {
+          id: "comprehensive-path",
+          title: "Complete Financial Mastery",
+          description: "Comprehensive financial education covering all aspects",
+          difficulty: "Advanced",
+          estimatedTime: "12-16 weeks",
+          courses: ["budgeting-basics", "emergency-fund", "investing-101", "debt-management", "retirement-planning", "tax-planning"],
+          outcomes: ["Complete financial literacy", "Wealth building", "Financial independence planning"]
+        }
+      ],
+      achievements: [
+        {
+          id: "first-lesson",
+          title: "Learning Begins",
+          description: "Complete your first lesson",
+          xpRequired: 50,
+          badgeIcon: "🎯",
+          rarity: "Common"
+        },
+        {
+          id: "budget-master",
+          title: "Budget Master",
+          description: "Complete the budgeting course",
+          xpRequired: 150,
+          badgeIcon: "💰",
+          rarity: "Uncommon"
+        },
+        {
+          id: "investment-guru",
+          title: "Investment Guru",
+          description: "Complete the investment fundamentals course",
+          xpRequired: 200,
+          badgeIcon: "📈",
+          rarity: "Uncommon"
+        },
+        {
+          id: "debt-crusher",
+          title: "Debt Crusher",
+          description: "Complete the debt management course",
+          xpRequired: 180,
+          badgeIcon: "💳",
+          rarity: "Uncommon"
+        },
+        {
+          id: "emergency-ready",
+          title: "Emergency Ready",
+          description: "Complete the emergency fund course",
+          xpRequired: 120,
+          badgeIcon: "🛡️",
+          rarity: "Common"
+        },
+        {
+          id: "retirement-planner",
+          title: "Retirement Planner",
+          description: "Complete the retirement planning course",
+          xpRequired: 250,
+          badgeIcon: "🏖️",
+          rarity: "Rare"
+        },
+        {
+          id: "tax-optimizer",
+          title: "Tax Optimizer",
+          description: "Complete the tax planning course",
+          xpRequired: 220,
+          badgeIcon: "📊",
+          rarity: "Rare"
+        },
+        {
+          id: "quiz-perfectionist",
+          title: "Quiz Perfectionist",
+          description: "Score 100% on 5 quizzes",
+          xpRequired: 500,
+          badgeIcon: "🎯",
+          rarity: "Epic"
+        },
+        {
+          id: "learning-streak-7",
+          title: "Week Warrior",
+          description: "Complete lessons for 7 consecutive days",
+          xpRequired: 350,
+          badgeIcon: "⚡",
+          rarity: "Rare"
+        },
+        {
+          id: "learning-streak-30",
+          title: "Month Master",
+          description: "Complete lessons for 30 consecutive days",
+          xpRequired: 1500,
+          badgeIcon: "🔥",
+          rarity: "Legendary"
+        },
+        {
+          id: "course-completionist",
+          title: "Course Completionist",
+          description: "Complete all available courses",
+          xpRequired: 1000,
+          badgeIcon: "👑",
+          rarity: "Legendary"
+        },
+        {
+          id: "financial-expert",
+          title: "Financial Expert",
+          description: "Reach level 10",
+          xpRequired: 2000,
+          badgeIcon: "🎓",
+          rarity: "Legendary"
+        }
+      ],
+      progressionSystem: {},
+      assessmentFramework: {},
+      qualityAssurance: {}
+    };
+  };
+
+  const loadStoredProgress = async (): Promise<UserProgress> => {
+    try {
+      const stored = await curriculumService.loadUserProgress();
+      return stored;
+    } catch {
+      return {
+        completedCourses: [],
+        completedLessons: [],
+        totalXP: 0,
+        currentLevel: 1,
+        achievements: [],
+        lastActive: new Date().toISOString()
+      };
     }
   };
 
@@ -106,53 +870,209 @@ export default function CurriculumBasedEducation() {
   };
 
   const completeLesson = async (lessonId: string, xpReward: number) => {
-    if (userProgress.completedLessons.includes(lessonId)) {
-      Alert.alert('Already Completed', 'You have already completed this lesson!');
+    try {
+      if (userProgress.completedLessons.includes(lessonId)) {
+        Alert.alert('Already Completed', 'You have already completed this lesson!');
+        return;
+      }
+
+      const newLevel = calculateLevel(userProgress.totalXP + xpReward);
+      const leveledUp = newLevel > userProgress.currentLevel;
+      
+      const newProgress = {
+        ...userProgress,
+        completedLessons: [...userProgress.completedLessons, lessonId],
+        totalXP: userProgress.totalXP + xpReward,
+        currentLevel: newLevel,
+        lastActive: new Date().toISOString()
+      };
+      
+      setUserProgress(newProgress);
+      await curriculumService.saveUserProgress(newProgress);
+      
+      // Update gamification system
+      try {
+        await addPoints(xpReward);
+        await updateStats({ lessonsCompleted: userProgress.completedLessons.length + 1 });
+      } catch (gamificationError) {
+        console.warn('Gamification update failed:', gamificationError);
+        // Continue with lesson completion even if gamification fails
+      }
+      
+      // Update study streak
+      updateStudyStreak();
+      
+      // Update skill progress
+      updateSkillProgress(lessonId);
+      
+      // Check for achievements
+      try {
+        if (newProgress.completedLessons.length === 1) {
+          await unlockAchievement('first-lesson');
+        }
+        if (newProgress.completedLessons.length === 10) {
+          await unlockAchievement('lesson-enthusiast');
+        }
+        if (newProgress.completedLessons.length === 50) {
+          await unlockAchievement('learning-master');
+        }
+        
+        // Check if course is completed
+        const courseCompleted = checkCourseCompletion(lessonId, newProgress);
+        if (courseCompleted) {
+          await unlockAchievement('course-completed');
+        }
+      } catch (achievementError) {
+        console.warn('Achievement update failed:', achievementError);
+        // Continue with lesson completion even if achievement fails
+      }
+      
+      let message = `You earned ${xpReward} XP! 🎉`;
+      if (leveledUp) {
+        message += `\n\nLevel Up! 🚀 You're now level ${newLevel}!`;
+      }
+      
+      Alert.alert('Lesson Completed!', message);
+      setShowLessonModal(false);
+    } catch (error) {
+      console.error('Error completing lesson:', error);
+      Alert.alert('Error', 'Failed to complete lesson. Please try again.');
+    }
+  };
+
+  const startQuiz = (lesson: Lesson) => {
+    if (!lesson.quiz) {
+      Alert.alert('No Quiz Available', 'This lesson does not have a quiz.');
       return;
     }
 
-    const newLevel = calculateLevel(userProgress.totalXP + xpReward);
-    const leveledUp = newLevel > userProgress.currentLevel;
-    
-    const newProgress = {
-      ...userProgress,
-      completedLessons: [...userProgress.completedLessons, lessonId],
-      totalXP: userProgress.totalXP + xpReward,
-      currentLevel: newLevel,
-      lastActive: new Date().toISOString()
-    };
-    
-    setUserProgress(newProgress);
-    await curriculumService.saveUserProgress(newProgress);
-    
-    // Update gamification system
-    await addPoints(xpReward);
-    await updateStats({ lessonsCompleted: userProgress.completedLessons.length + 1 });
-    
-    // Check for achievements
-    if (newProgress.completedLessons.length === 1) {
-      await unlockAchievement('first-lesson');
+    setSelectedQuiz(lesson.quiz);
+    setQuizState({
+      currentQuestionIndex: 0,
+      selectedAnswers: new Array(lesson.quiz.questions.length).fill(-1),
+      showResult: false,
+      score: 0,
+      passed: false,
+      timeRemaining: lesson.quiz.questions.length * 120, // 2 minutes per question
+      startTime: new Date(),
+    });
+    setShowQuizModal(true);
+  };
+
+  const selectAnswer = (answerIndex: number) => {
+    const newAnswers = [...quizState.selectedAnswers];
+    newAnswers[quizState.currentQuestionIndex] = answerIndex;
+    setQuizState(prev => ({
+      ...prev,
+      selectedAnswers: newAnswers
+    }));
+  };
+
+  const nextQuestion = () => {
+    if (quizState.currentQuestionIndex < (selectedQuiz?.questions.length || 0) - 1) {
+      setQuizState(prev => ({
+        ...prev,
+        currentQuestionIndex: prev.currentQuestionIndex + 1
+      }));
+    } else {
+      submitQuiz();
     }
-    if (newProgress.completedLessons.length === 10) {
-      await unlockAchievement('lesson-enthusiast');
+  };
+
+  const previousQuestion = () => {
+    if (quizState.currentQuestionIndex > 0) {
+      setQuizState(prev => ({
+        ...prev,
+        currentQuestionIndex: prev.currentQuestionIndex - 1
+      }));
     }
-    if (newProgress.completedLessons.length === 50) {
-      await unlockAchievement('learning-master');
+  };
+
+  const submitQuiz = async () => {
+    if (!selectedQuiz) return;
+
+    let correctAnswers = 0;
+    selectedQuiz.questions.forEach((question, index) => {
+      if (quizState.selectedAnswers[index] === question.correctAnswer) {
+        correctAnswers++;
+      }
+    });
+
+    const score = Math.round((correctAnswers / selectedQuiz.questions.length) * 100);
+    const passed = score >= selectedQuiz.passingScore;
+
+    setQuizState(prev => ({
+      ...prev,
+      score,
+      passed,
+      showResult: true
+    }));
+
+    if (passed) {
+      // Award bonus XP for quiz completion
+      const bonusXP = Math.round(score * 1.5); // 1.5 XP per percentage point
+      await addPoints(bonusXP);
+      
+      // Check for quiz-specific achievements
+      checkQuizAchievements(score, correctAnswers, selectedQuiz.questions.length);
     }
+  };
+
+  const updateStudyStreak = () => {
+    const today = new Date().toDateString();
+    const lastStudyDate = userProgress.lastActive ? new Date(userProgress.lastActive).toDateString() : '';
     
-    // Check if course is completed
-    const courseCompleted = checkCourseCompletion(lessonId, newProgress);
-    if (courseCompleted) {
-      await unlockAchievement('course-completed');
+    if (today !== lastStudyDate) {
+      const newStreak = studyStreak + 1;
+      setStudyStreak(newStreak);
+      
+      // Check streak achievements
+      if (newStreak === 7) {
+        unlockAchievement('week-warrior');
+      } else if (newStreak === 30) {
+        unlockAchievement('month-master');
+      }
     }
+  };
+
+  const updateSkillProgress = (lessonId: string) => {
+    // Update skill progress based on lesson category
+    const course = curriculum?.courses.find(c => 
+      c.lessons.some(l => l.id === lessonId)
+    );
     
-    let message = `You earned ${xpReward} XP! 🎉`;
-    if (leveledUp) {
-      message += `\n\nLevel Up! 🚀 You're now level ${newLevel}!`;
+    if (!course) return;
+
+    const skillIncrement = 10; // 10 points per lesson completion
+    const newSkillProgress = { ...skillProgress };
+
+    switch (course.category) {
+      case 'Core Skills':
+        newSkillProgress.budgeting = Math.min(100, newSkillProgress.budgeting + skillIncrement);
+        break;
+      case 'Investing':
+        newSkillProgress.investing = Math.min(100, newSkillProgress.investing + skillIncrement);
+        break;
+      case 'Tax Planning':
+        newSkillProgress.taxPlanning = Math.min(100, newSkillProgress.taxPlanning + skillIncrement);
+        break;
+      case 'Business':
+        newSkillProgress.businessFinance = Math.min(100, newSkillProgress.businessFinance + skillIncrement);
+        break;
+      default:
+        newSkillProgress.riskManagement = Math.min(100, newSkillProgress.riskManagement + skillIncrement);
     }
-    
-    Alert.alert('Lesson Completed!', message);
-    setShowLessonModal(false);
+
+    setSkillProgress(newSkillProgress);
+  };
+
+  const checkQuizAchievements = async (score: number, correct: number, total: number) => {
+    if (score === 100) {
+      await unlockAchievement('perfect-quiz');
+    }
+    if (correct >= 10) {
+      await unlockAchievement('quiz-master');
+    }
   };
 
   const calculateLevel = (totalXP: number): number => {
@@ -457,6 +1377,198 @@ export default function CurriculumBasedEducation() {
     );
   };
 
+  const renderQuizModal = () => {
+    if (!selectedQuiz || !quizState) return null;
+
+    const currentQuestion = selectedQuiz.questions[quizState.currentQuestionIndex];
+    const progress = ((quizState.currentQuestionIndex + 1) / selectedQuiz.questions.length) * 100;
+
+    if (quizState.showResult) {
+      return (
+        <Modal visible={showQuizModal} animationType="slide" presentationStyle="pageSheet">
+          <SafeAreaView style={styles.modalContainer}>
+            <View style={styles.quizResultContainer}>
+              <LinearGradient
+                colors={quizState.passed ? ['#10B981', '#059669'] : ['#EF4444', '#DC2626']}
+                style={styles.resultHeader}
+              >
+                <Ionicons 
+                  name={quizState.passed ? "checkmark-circle" : "close-circle"} 
+                  size={64} 
+                  color="#FFFFFF" 
+                />
+                <Text style={styles.resultTitle}>
+                  {quizState.passed ? 'Quiz Passed!' : 'Quiz Failed'}
+                </Text>
+                <Text style={styles.resultScore}>
+                  Score: {quizState.score}%
+                </Text>
+                <Text style={styles.resultDetail}>
+                  {quizState.passed 
+                    ? `Excellent work! You've mastered this topic.` 
+                    : `You need ${selectedQuiz.passingScore}% to pass. Review the material and try again.`
+                  }
+                </Text>
+              </LinearGradient>
+
+              <ScrollView style={styles.quizFeedback}>
+                <Text style={styles.feedbackTitle}>Detailed Feedback</Text>
+                {selectedQuiz.questions.map((question, index) => {
+                  const userAnswer = quizState.selectedAnswers[index];
+                  const isCorrect = userAnswer === question.correctAnswer;
+                  
+                  return (
+                    <View key={question.id} style={styles.feedbackItem}>
+                      <View style={styles.feedbackHeader}>
+                        <Text style={styles.questionNumber}>Q{index + 1}</Text>
+                        <Ionicons 
+                          name={isCorrect ? "checkmark-circle" : "close-circle"} 
+                          size={20} 
+                          color={isCorrect ? "#10B981" : "#EF4444"} 
+                        />
+                      </View>
+                      <Text style={styles.feedbackQuestion}>{question.question}</Text>
+                      <Text style={styles.feedbackAnswer}>
+                        Your answer: {question.options[userAnswer] || 'Not answered'}
+                      </Text>
+                      {!isCorrect && (
+                        <Text style={styles.correctAnswer}>
+                          Correct answer: {question.options[question.correctAnswer]}
+                        </Text>
+                      )}
+                      <Text style={styles.explanation}>{question.explanation}</Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+
+              <View style={styles.quizActions}>
+                {quizState.passed && (
+                  <TouchableOpacity 
+                    style={styles.continueButton}
+                    onPress={() => {
+                      setShowQuizModal(false);
+                      completeLesson(selectedLesson?.id || '', selectedLesson?.xpReward || 0);
+                    }}
+                  >
+                    <Text style={styles.continueButtonText}>Continue Learning</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity 
+                  style={styles.retryButton}
+                  onPress={() => {
+                    setQuizState({
+                      currentQuestionIndex: 0,
+                      selectedAnswers: new Array(selectedQuiz.questions.length).fill(-1),
+                      showResult: false,
+                      score: 0,
+                      passed: false,
+                      timeRemaining: selectedQuiz.questions.length * 120,
+                      startTime: new Date(),
+                    });
+                  }}
+                >
+                  <Text style={styles.retryButtonText}>
+                    {quizState.passed ? 'Retake Quiz' : 'Try Again'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.closeButton}
+                  onPress={() => setShowQuizModal(false)}
+                >
+                  <Text style={styles.closeButtonText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </SafeAreaView>
+        </Modal>
+      );
+    }
+
+    return (
+      <Modal visible={showQuizModal} animationType="slide" presentationStyle="pageSheet">
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.quizHeader}>
+            <View style={styles.quizProgress}>
+              <Text style={styles.quizProgressText}>
+                Question {quizState.currentQuestionIndex + 1} of {selectedQuiz.questions.length}
+              </Text>
+              <View style={styles.progressBar}>
+                <View style={[styles.progressFill, { width: `${progress}%` }]} />
+              </View>
+            </View>
+            <TouchableOpacity onPress={() => setShowQuizModal(false)}>
+              <Ionicons name="close" size={24} color="#64748B" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.quizContent}>
+            <Text style={styles.questionText}>{currentQuestion.question}</Text>
+            
+            <View style={styles.optionsContainer}>
+              {currentQuestion.options.map((option, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.optionButton,
+                    quizState.selectedAnswers[quizState.currentQuestionIndex] === index && styles.selectedOption
+                  ]}
+                  onPress={() => selectAnswer(index)}
+                >
+                  <View style={styles.optionContent}>
+                    <View style={[
+                      styles.optionIndicator,
+                      quizState.selectedAnswers[quizState.currentQuestionIndex] === index && styles.selectedIndicator
+                    ]}>
+                      <Text style={[
+                        styles.optionLetter,
+                        quizState.selectedAnswers[quizState.currentQuestionIndex] === index && styles.selectedLetter
+                      ]}>
+                        {String.fromCharCode(65 + index)}
+                      </Text>
+                    </View>
+                    <Text style={[
+                      styles.optionText,
+                      quizState.selectedAnswers[quizState.currentQuestionIndex] === index && styles.selectedOptionText
+                    ]}>
+                      {option}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
+
+          <View style={styles.quizNavigation}>
+            <TouchableOpacity
+              style={[styles.navButton, quizState.currentQuestionIndex === 0 && styles.disabledButton]}
+              onPress={previousQuestion}
+              disabled={quizState.currentQuestionIndex === 0}
+            >
+              <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
+              <Text style={styles.navButtonText}>Previous</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.navButton, 
+                styles.nextButton,
+                quizState.selectedAnswers[quizState.currentQuestionIndex] === -1 && styles.disabledButton
+              ]}
+              onPress={nextQuestion}
+              disabled={quizState.selectedAnswers[quizState.currentQuestionIndex] === -1}
+            >
+              <Text style={styles.navButtonText}>
+                {quizState.currentQuestionIndex === selectedQuiz.questions.length - 1 ? 'Submit' : 'Next'}
+              </Text>
+              <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
+    );
+  };
+
   const renderCourseModal = () => (
     <Modal visible={showCourseModal} animationType="slide" presentationStyle="pageSheet">
       <SafeAreaView style={styles.modalContainer}>
@@ -540,15 +1652,155 @@ export default function CurriculumBasedEducation() {
                   ))}
                 </View>
               )}
+              
+              {selectedLesson.content.interactiveElements && (
+                <View style={styles.interactiveSection}>
+                  <Text style={styles.interactiveSectionTitle}>🎯 Interactive Learning Tools</Text>
+                  
+                  {selectedLesson.content.interactiveElements.calculator && (
+                    <TouchableOpacity
+                      style={styles.interactiveButton}
+                      onPress={() => {
+                        setCalculatorType(selectedLesson.content.interactiveElements.calculator);
+                        setCalculatorVisible(true);
+                      }}
+                    >
+                      <Ionicons name="calculator" size={20} color="#FFFFFF" />
+                      <Text style={styles.interactiveButtonText}>
+                        {selectedLesson.content.interactiveElements.calculator === 'budget' ? 'Budget Calculator' : 'Compound Interest Calculator'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  
+                  {selectedLesson.content.interactiveElements.scenarios && (
+                    <View style={styles.scenarioContainer}>
+                      <Text style={styles.scenarioTitle}>📝 Practice Scenarios</Text>
+                      {selectedLesson.content.interactiveElements.scenarios.map((scenario: string, index: number) => (
+                        <TouchableOpacity
+                          key={index}
+                          style={[styles.scenarioButton, scenarioMode === scenario && styles.activeScenario]}
+                          onPress={() => setScenarioMode(scenarioMode === scenario ? null : scenario)}
+                        >
+                          <Text style={[styles.scenarioButtonText, scenarioMode === scenario && styles.activeScenarioText]}>
+                            {scenario.replace('_', ' ').toUpperCase()}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                  
+                  {scenarioMode && (
+                    <View style={styles.scenarioContent}>
+                      <Text style={styles.scenarioContentTitle}>
+                        {scenarioMode === 'student' && 'Student Budget Scenario'}
+                        {scenarioMode === 'working_professional' && 'Working Professional Scenario'}
+                        {scenarioMode === 'family' && 'Family Budget Scenario'}
+                      </Text>
+                      <View style={styles.scenarioDetails}>
+                        {scenarioMode === 'student' && (
+                          <>
+                            <Text style={styles.scenarioIncome}>💰 Income: R8,000/month (part-time + allowance)</Text>
+                            <Text style={styles.scenarioExpensesTitle}>📊 Monthly Expenses:</Text>
+                            <Text style={styles.scenarioExpense}>• Rent: R3,000</Text>
+                            <Text style={styles.scenarioExpense}>• Food: R1,500</Text>
+                            <Text style={styles.scenarioExpense}>• Transport: R800</Text>
+                            <Text style={styles.scenarioExpense}>• Books: R500</Text>
+                            <Text style={styles.scenarioExpense}>• Entertainment: R700</Text>
+                            <Text style={styles.scenarioChallenge}>🎯 Challenge: How can you save R500/month for emergencies?</Text>
+                          </>
+                        )}
+                        {scenarioMode === 'working_professional' && (
+                          <>
+                            <Text style={styles.scenarioIncome}>💰 Income: R25,000/month (after tax)</Text>
+                            <Text style={styles.scenarioExpensesTitle}>📊 Monthly Expenses:</Text>
+                            <Text style={styles.scenarioExpense}>• Rent: R8,000</Text>
+                            <Text style={styles.scenarioExpense}>• Food: R3,000</Text>
+                            <Text style={styles.scenarioExpense}>• Transport: R2,000</Text>
+                            <Text style={styles.scenarioExpense}>• Insurance: R1,200</Text>
+                            <Text style={styles.scenarioExpense}>• Utilities: R1,500</Text>
+                            <Text style={styles.scenarioChallenge}>🎯 Challenge: Plan to save for a car deposit of R50,000 in 2 years</Text>
+                          </>
+                        )}
+                        {scenarioMode === 'family' && (
+                          <>
+                            <Text style={styles.scenarioIncome}>💰 Income: R45,000/month (combined income)</Text>
+                            <Text style={styles.scenarioExpensesTitle}>📊 Monthly Expenses:</Text>
+                            <Text style={styles.scenarioExpense}>• Bond: R12,000</Text>
+                            <Text style={styles.scenarioExpense}>• Groceries: R6,000</Text>
+                            <Text style={styles.scenarioExpense}>• School fees: R4,000</Text>
+                            <Text style={styles.scenarioExpense}>• Insurance: R2,500</Text>
+                            <Text style={styles.scenarioExpense}>• Utilities: R2,000</Text>
+                            <Text style={styles.scenarioChallenge}>🎯 Challenge: Save for children's education while building retirement fund</Text>
+                          </>
+                        )}
+                      </View>
+                    </View>
+                  )}
+                </View>
+              )}
             </View>
           )}
           
-          <TouchableOpacity
-            style={styles.completeButton}
-            onPress={() => completeLesson(selectedLesson?.id || '', selectedLesson?.xpReward || 0)}
-          >
-            <Text style={styles.completeButtonText}>Complete Lesson (+{selectedLesson?.xpReward} XP)</Text>
-          </TouchableOpacity>
+          <View style={styles.lessonActions}>
+            {/* Interactive Tools Section */}
+            {selectedLesson?.content?.interactiveElements && (
+              <View style={styles.interactiveSection}>
+                <Text style={styles.interactiveSectionTitle}>Interactive Learning Tools</Text>
+                
+                {selectedLesson.content.interactiveElements.calculator === 'budget' && (
+                  <TouchableOpacity
+                    style={styles.interactiveButton}
+                    onPress={() => setShowInteractiveTools(!showInteractiveTools)}
+                  >
+                    <Ionicons name="calculator" size={20} color="#FFFFFF" />
+                    <Text style={styles.interactiveButtonText}>Budget Calculator</Text>
+                  </TouchableOpacity>
+                )}
+                
+                {selectedLesson.content.interactiveElements.calculator === 'compound_interest' && (
+                  <TouchableOpacity
+                    style={styles.interactiveButton}
+                    onPress={() => setShowInteractiveTools(!showInteractiveTools)}
+                  >
+                    <Ionicons name="calculator" size={20} color="#FFFFFF" />
+                    <Text style={styles.interactiveButtonText}>Compound Interest Calculator</Text>
+                  </TouchableOpacity>
+                )}
+                
+                {showInteractiveTools && selectedLesson.content.interactiveElements.calculator === 'budget' && renderBudgetCalculator()}
+                {showInteractiveTools && selectedLesson.content.interactiveElements.calculator === 'compound_interest' && renderCompoundInterestCalculator()}
+              </View>
+            )}
+            
+            {/* Quiz and Complete Buttons */}
+            {selectedLesson?.quiz && (
+              <TouchableOpacity
+                style={styles.quizButton}
+                onPress={() => {
+                  setShowLessonModal(false);
+                  startQuiz(selectedLesson);
+                }}
+              >
+                <Ionicons name="help-circle" size={20} color="#FFFFFF" />
+                <Text style={styles.quizButtonText}>Take Quiz ({selectedLesson.quiz.questions.length} questions)</Text>
+              </TouchableOpacity>
+            )}
+            
+            <TouchableOpacity
+              style={[styles.completeButton, selectedLesson?.quiz && styles.completeButtonWithQuiz]}
+              onPress={() => {
+                console.log('Complete Lesson button pressed');
+                console.log('Selected lesson:', selectedLesson?.id, selectedLesson?.xpReward);
+                if (selectedLesson?.id) {
+                  completeLesson(selectedLesson.id, selectedLesson.xpReward || 0);
+                } else {
+                  Alert.alert('Error', 'No lesson selected');
+                }
+              }}
+            >
+              <Text style={styles.completeButtonText}>Complete Lesson (+{selectedLesson?.xpReward} XP)</Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </SafeAreaView>
     </Modal>
@@ -595,6 +1847,7 @@ export default function CurriculumBasedEducation() {
       
       {renderCourseModal()}
       {renderLessonModal()}
+      {renderQuizModal()}
     </SafeAreaView>
   );
 }
@@ -981,6 +2234,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 20,
   },
+  completeButtonWithQuiz: {
+    marginTop: 0,
+  },
   completeButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
@@ -1127,5 +2383,357 @@ const styles = StyleSheet.create({
     color: '#667eea',
     fontWeight: '600',
     marginLeft: 8,
+  },
+  
+  // Quiz-specific styles
+  lessonActions: {
+    marginTop: 20,
+  },
+  quizButton: {
+    backgroundColor: '#3B82F6',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  quizButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  quizHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+  },
+  quizProgress: {
+    flex: 1,
+    marginRight: 16,
+  },
+  quizProgressText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 8,
+  },
+  quizContent: {
+    flex: 1,
+    padding: 20,
+  },
+  questionText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1E293B',
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  optionsContainer: {
+    gap: 12,
+  },
+  optionButton: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  selectedOption: {
+    borderColor: '#667eea',
+    backgroundColor: '#F8FAFF',
+  },
+  optionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  optionIndicator: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  selectedIndicator: {
+    backgroundColor: '#667eea',
+  },
+  optionLetter: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#64748B',
+  },
+  selectedLetter: {
+    color: '#FFFFFF',
+  },
+  optionText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#475569',
+    lineHeight: 22,
+  },
+  selectedOptionText: {
+    color: '#1E293B',
+    fontWeight: '500',
+  },
+  quizNavigation: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 20,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  navButton: {
+    backgroundColor: '#667eea',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 100,
+    justifyContent: 'center',
+  },
+  nextButton: {
+    backgroundColor: '#10B981',
+  },
+  disabledButton: {
+    backgroundColor: '#94A3B8',
+    opacity: 0.6,
+  },
+  navButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginHorizontal: 4,
+  },
+  quizResultContainer: {
+    flex: 1,
+  },
+  resultHeader: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  resultTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  resultScore: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  resultDetail: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    opacity: 0.9,
+  },
+  quizFeedback: {
+    flex: 1,
+    padding: 20,
+  },
+  feedbackTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1E293B',
+    marginBottom: 20,
+  },
+  feedbackItem: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  feedbackHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  questionNumber: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#667eea',
+  },
+  feedbackQuestion: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 8,
+    lineHeight: 22,
+  },
+  feedbackAnswer: {
+    fontSize: 14,
+    color: '#475569',
+    marginBottom: 4,
+  },
+  correctAnswer: {
+    fontSize: 14,
+    color: '#10B981',
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  explanation: {
+    fontSize: 14,
+    color: '#64748B',
+    lineHeight: 20,
+    fontStyle: 'italic',
+  },
+  quizActions: {
+    padding: 20,
+    gap: 12,
+  },
+  continueButton: {
+    backgroundColor: '#10B981',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  continueButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  retryButton: {
+    backgroundColor: '#667eea',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  closeButton: {
+    backgroundColor: '#64748B',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  
+  // Interactive Learning Styles
+  interactiveSection: {
+    marginBottom: 20,
+    padding: 16,
+    backgroundColor: '#F8FAFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  interactiveSectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1E293B',
+    marginBottom: 12,
+  },
+  interactiveButton: {
+    backgroundColor: '#8B5CF6',
+    borderRadius: 12,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  interactiveButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  calculatorContainer: {
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginTop: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  calculatorTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1E293B',
+    marginBottom: 8,
+  },
+  calculatorDescription: {
+    fontSize: 14,
+    color: '#64748B',
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  inputContainer: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  calculatorInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: '#F9FAFB',
+  },
+  calculatorResults: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  resultRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  resultLabel: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  resultValue: {
+    fontSize: 16,
+    color: '#059669',
+    fontWeight: 'bold',
+  },
+  highlightedResult: {
+    fontSize: 18,
+    color: '#047857',
   },
 });
